@@ -1,14 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
-project(MastersLavaSimulation)
+project(MastersLavaSimulation LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(PR_ROOT ${CMAKE_CURRENT_LIST_DIR})
+# Include headers
+include_directories("${CMAKE_CURRENT_LIST_DIR}/include")
 
-include_directories("${PR_ROOT}/include")
-
+# Add subdirectory for sources
 add_subdirectory(src)
 
-add_executable(${PROJECT_NAME} "${PR_ROOT}/main.cc" ${SRC_FILES})
+# Add main executable
+add_executable(${PROJECT_NAME} main.cc)
+
+add_subdirectory(external/DirectXTK12)
+
+# Link with the src library (see below)DirectXTK
+target_link_libraries(${PROJECT_NAME} PRIVATE MastersLavaSimulationLib DirectXTK12)
 

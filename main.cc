@@ -15,8 +15,21 @@
 
 int main(int argc, char** argv)
 {
-	//RenderSubsystem renderSubsystem;
-	//renderSubsystem.Initialize();
-	//std::cout << "Hello world!" << std::endl;
+	RenderSubsystem renderer;
+	renderer.Initialize();
+
+	MSG msg = {};
+	while (msg.message != WM_QUIT) {
+		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		else {
+			renderer.Draw();
+		}
+	}
+
+	renderer.Shutdown();
+
 	return 0;
 }

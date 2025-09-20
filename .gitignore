@@ -41,6 +41,8 @@
 *.dwo
 
 
+build/
 out/
 .vs/
 .vscode/
+external/*
