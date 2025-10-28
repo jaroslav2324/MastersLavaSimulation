@@ -4,17 +4,17 @@ project(MastersLavaSimulation LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Include headers
-include_directories("${CMAKE_CURRENT_LIST_DIR}/include")
-
-# Add subdirectory for sources
-add_subdirectory(src)
-
-# Add main executable
-add_executable(${PROJECT_NAME} main.cc)
-
 add_subdirectory(external/DirectXTK12)
 
-# Link with the src library (see below)DirectXTK
-target_link_libraries(${PROJECT_NAME} PRIVATE MastersLavaSimulationLib DirectXTK12)
+add_subdirectory(src)
+
+add_executable(${PROJECT_NAME} main.cc ${SRC_FILES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+${CMAKE_CURRENT_LIST_DIR}/include
+${CMAKE_CURRENT_LIST_DIR}/external/DirectXTK12/Inc
+                    )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE DirectXTK12)
+
 

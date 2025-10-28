@@ -6,10 +6,23 @@
 #include <dxgi1_6.h>
 #include <cstdint>
 
+#include "Camera.h"
+#include "Cube.h"
+
+using namespace DirectX::SimpleMath;
+
+struct GlobalConstants
+{
+	Matrix view;
+	Matrix proj;
+	float nearPlane;
+	float farPlane;
+	float pad[2];
+};
+
 class RenderSubsystem
 {
 public:
-
 	void Initialize();
 	void Shutdown();
 	void Draw();
@@ -18,7 +31,7 @@ private:
 	void CreateDevice();
 	void CreateCommandQueueAndList();
 	void CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height);
-	
+
 	void CreateFence();
 	void GetDescriptorSizes();
 	UINT Check4xMSAAQualitySupport();
@@ -64,4 +77,17 @@ private:
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView{};
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipelineState;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_rootSignature;
+
+	// --- Global constant buffer ---
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_globalConstantBuffer;
+	D3D12_GPU_VIRTUAL_ADDRESS m_globalCBAddress;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_globalCBV{};
+	GlobalConstants m_globalConstants;
+
+	void CreateGlobalConstantBuffer();
+	void UpdateGlobalConstantBuffer();
+
+	Cube cube1;
+	Cube cube2;
+	Camera camera;
 };

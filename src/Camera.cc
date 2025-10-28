@@ -14,9 +14,9 @@ void Camera::SetPosition(float x, float y, float z)
 void Camera::SetRotation(float pitch, float yaw, float roll)
 {
     rotation = Quaternion::CreateFromYawPitchRoll(
-        DirectX::XMConvertToRadians(yaw),
-        DirectX::XMConvertToRadians(pitch),
-        DirectX::XMConvertToRadians(roll));
+        yaw,
+        pitch,
+        roll);
 }
 
 void Camera::SetRotationQuaternion(float x, float y, float z, float w)

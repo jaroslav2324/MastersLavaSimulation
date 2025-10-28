@@ -1,10 +1,10 @@
 #include "RenderSubsystem.h"
-#include "ShaderCompiler.h"
 
 #include <stdexcept>
 
-// TODO: include normally
-#include "../external/DirectXTK12/Inc/SimpleMath.h"
+#include <SimpleMath.h>
+
+#include "ShaderCompiler.h"
 
 void RenderSubsystem::Initialize()
 {
@@ -19,7 +19,88 @@ void RenderSubsystem::Initialize()
     CreateDescriptorHeaps();
     CreateRenderTargetViews();
     CreateDepthStencil();
-    CreateTriangleResources();
+
+    // --- NEW: Camera and cubes ---
+    camera = Camera();
+    cube1 = Cube(m_device.Get());
+    cube2 = Cube(m_device.Get());
+
+    cube1.GetTransform().position = Vector3(-1.0f, 0.0f, 0.0f);
+    cube2.GetTransform().position = Vector3(1.0f, 0.0f, 0.0f);
+
+    cube1.Initialize(m_commandList.Get());
+    cube2.Initialize(m_commandList.Get());
+
+    // --- NEW: Create global constant buffer ---
+    CreateGlobalConstantBuffer();
+
+    // --- NEW: Create cube constant buffers ---
+    cube1.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 1);
+    cube2.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 2);
+}
+
+// --- NEW: Create global constant buffer ---
+void RenderSubsystem::CreateGlobalConstantBuffer()
+{
+    // Create upload heap for constant buffer
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+    heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    heapProps.CreationNodeMask = 1;
+    heapProps.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC cbDesc = {};
+    cbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    cbDesc.Alignment = 0;
+    cbDesc.Width = (sizeof(GlobalConstants) + 255) & ~255; // CB size must be 256-byte aligned
+    cbDesc.Height = 1;
+    cbDesc.DepthOrArraySize = 1;
+    cbDesc.MipLevels = 1;
+    cbDesc.Format = DXGI_FORMAT_UNKNOWN;
+    cbDesc.SampleDesc.Count = 1;
+    cbDesc.SampleDesc.Quality = 0;
+    cbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    cbDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    HRESULT hr = m_device->CreateCommittedResource(
+        &heapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &cbDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&m_globalConstantBuffer));
+    if (FAILED(hr))
+        throw std::runtime_error("Failed to create global constant buffer.");
+
+    m_globalCBAddress = m_globalConstantBuffer->GetGPUVirtualAddress();
+
+    // Create CBV descriptor
+    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+    cbvDesc.BufferLocation = m_globalCBAddress;
+    cbvDesc.SizeInBytes = (sizeof(GlobalConstants) + 255) & ~255;
+    m_globalCBV = m_cbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+    m_device->CreateConstantBufferView(&cbvDesc, m_globalCBV);
+}
+
+// --- NEW: Update global constant buffer ---
+void RenderSubsystem::UpdateGlobalConstantBuffer()
+{
+    // Fill global constants
+    m_globalConstants.view = camera.GetViewMatrix();
+    m_globalConstants.proj = Matrix::CreatePerspectiveFieldOfView(
+        DirectX::XMConvertToRadians(60.0f), float(m_width) / float(m_height), 0.1f, 100.0f);
+    m_globalConstants.nearPlane = 0.1f;
+    m_globalConstants.farPlane = 100.0f;
+
+    // Map and copy data
+    UINT8* pData;
+    D3D12_RANGE readRange = {0, 0};
+    HRESULT hr = m_globalConstantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pData));
+    if (FAILED(hr))
+        throw std::runtime_error("Failed to map global constant buffer.");
+    memcpy(pData, &m_globalConstants, sizeof(GlobalConstants));
+    m_globalConstantBuffer->Unmap(0, nullptr);
 }
 
 void RenderSubsystem::CreateDevice()
@@ -357,188 +438,7 @@ void RenderSubsystem::Draw()
         }
     }
 
-    RenderTriangle();
-}
-
-void RenderSubsystem::CreateTriangleResources()
-{
-    // Define a local vertex struct using Vector3 for position and color
-    struct TriangleVertex
-    {
-        DirectX::SimpleMath::Vector3 position;
-        DirectX::SimpleMath::Vector3 color;
-    };
-
-    // Vertex buffer for triangle
-    TriangleVertex triangleVertices[] =
-        {
-            {DirectX::SimpleMath::Vector3(0.0f, 0.5f, 0.0f), DirectX::SimpleMath::Vector3(1.0f, 0.0f, 0.0f)},
-            {DirectX::SimpleMath::Vector3(0.5f, -0.5f, 0.0f), DirectX::SimpleMath::Vector3(0.0f, 1.0f, 0.0f)},
-            {DirectX::SimpleMath::Vector3(-0.5f, -0.5f, 0.0f), DirectX::SimpleMath::Vector3(0.0f, 0.0f, 1.0f)},
-        };
-
-    // Create vertex buffer
-    {
-        const UINT vertexBufferSize = sizeof(triangleVertices);
-
-        // Explicit heap properties
-        D3D12_HEAP_PROPERTIES heapProps = {};
-        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-        heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        heapProps.CreationNodeMask = 1;
-        heapProps.VisibleNodeMask = 1;
-
-        // Explicit resource desc
-        D3D12_RESOURCE_DESC resourceDesc = {};
-        resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        resourceDesc.Alignment = 0;
-        resourceDesc.Width = vertexBufferSize;
-        resourceDesc.Height = 1;
-        resourceDesc.DepthOrArraySize = 1;
-        resourceDesc.MipLevels = 1;
-        resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
-        resourceDesc.SampleDesc.Count = 1;
-        resourceDesc.SampleDesc.Quality = 0;
-        resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-        HRESULT hr = m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &resourceDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&m_vertexBuffer));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create triangle vertex buffer.");
-
-        // Copy the triangle data to the buffer
-        UINT8 *pVertexData;
-        D3D12_RANGE readRange = {0, 0};
-        hr = m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void **>(&pVertexData));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to map triangle vertex buffer.");
-
-        memcpy(pVertexData, triangleVertices, sizeof(triangleVertices));
-        m_vertexBuffer->Unmap(0, nullptr);
-    }
-
-    // Create root signature
-    {
-        D3D12_ROOT_PARAMETER rootParameters[1] = {};
-        rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-        rootParameters[0].Descriptor.ShaderRegister = 0;
-        rootParameters[0].Descriptor.RegisterSpace = 0;
-        rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-        D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-        rootSignatureDesc.NumParameters = 1;
-        rootSignatureDesc.pParameters = rootParameters;
-        rootSignatureDesc.NumStaticSamplers = 0;
-        rootSignatureDesc.pStaticSamplers = nullptr;
-        rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-        Microsoft::WRL::ComPtr<ID3DBlob> signature;
-        Microsoft::WRL::ComPtr<ID3DBlob> error;
-        HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
-        if (FAILED(hr))
-        {
-            if (error)
-                OutputDebugStringA((char *)error->GetBufferPointer());
-            throw std::runtime_error("Failed to serialize root signature.");
-        }
-
-        hr = m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create root signature.");
-    }
-
-    // Compile shaders
-    auto vsResult = ShaderCompiler::CompileFromFile(
-        L"shaders/TriangleVS.hlsl", "main", "vs_5_0");
-    if (!vsResult.success)
-        throw std::runtime_error("Vertex shader compilation failed.");
-
-    auto psResult = ShaderCompiler::CompileFromFile(
-        L"shaders/TrianglePS.hlsl", "main", "ps_5_0");
-    if (!psResult.success)
-        throw std::runtime_error("Pixel shader compilation failed.");
-
-    // Create PSO (Pipeline State Object)
-    {
-        // Input layout
-        D3D12_INPUT_ELEMENT_DESC inputLayout[] =
-            {
-                {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(TriangleVertex, position), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-                {"COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(TriangleVertex, color), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-            };
-
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-        psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
-        psoDesc.pRootSignature = m_rootSignature.Get();
-
-        psoDesc.VS.pShaderBytecode = vsResult.bytecode->GetBufferPointer();
-        psoDesc.VS.BytecodeLength = vsResult.bytecode->GetBufferSize();
-        psoDesc.PS.pShaderBytecode = psResult.bytecode->GetBufferPointer();
-        psoDesc.PS.BytecodeLength = psResult.bytecode->GetBufferSize();
-
-        // Rasterizer, blend, depth-stencil
-        psoDesc.RasterizerState = {};
-        psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-        psoDesc.RasterizerState.FrontCounterClockwise = FALSE;
-        psoDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-        psoDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-        psoDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-        psoDesc.RasterizerState.DepthClipEnable = TRUE;
-        psoDesc.RasterizerState.MultisampleEnable = FALSE;
-        psoDesc.RasterizerState.AntialiasedLineEnable = FALSE;
-        psoDesc.RasterizerState.ForcedSampleCount = 0;
-        psoDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-        psoDesc.BlendState = {};
-        psoDesc.BlendState.AlphaToCoverageEnable = FALSE;
-        psoDesc.BlendState.IndependentBlendEnable = FALSE;
-        const D3D12_RENDER_TARGET_BLEND_DESC defaultRenderTargetBlendDesc = {
-            FALSE, FALSE,
-            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-            D3D12_LOGIC_OP_NOOP,
-            D3D12_COLOR_WRITE_ENABLE_ALL};
-        for (int i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-            psoDesc.BlendState.RenderTarget[i] = defaultRenderTargetBlendDesc;
-
-        psoDesc.DepthStencilState = {};
-        psoDesc.DepthStencilState.DepthEnable = TRUE;
-        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-        psoDesc.DepthStencilState.StencilEnable = FALSE;
-        psoDesc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-        psoDesc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
-        psoDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        psoDesc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-        psoDesc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-        psoDesc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-        psoDesc.DepthStencilState.BackFace = psoDesc.DepthStencilState.FrontFace;
-
-        psoDesc.SampleMask = UINT_MAX;
-        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.NumRenderTargets = 1;
-        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        psoDesc.SampleDesc.Count = 1;
-        psoDesc.SampleDesc.Quality = 0;
-        psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-
-        HRESULT hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create graphics pipeline state.");
-    }
-}
-
-void RenderSubsystem::RenderTriangle()
-{
-    // Reset command allocator and command list
+    // --- NEW: Render cubes ---
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
@@ -583,15 +483,17 @@ void RenderSubsystem::RenderTriangle()
     // Set primitive topology
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // Set vertex buffer
-    D3D12_VERTEX_BUFFER_VIEW vbView = {};
-    vbView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-    vbView.SizeInBytes = static_cast<UINT>(3 * sizeof(DirectX::SimpleMath::Vector3) * 2); // 3 vertices, 2 Vector3 per vertex
-    vbView.StrideInBytes = sizeof(DirectX::SimpleMath::Vector3) * 2;
-    m_commandList->IASetVertexBuffers(0, 1, &vbView);
+    // --- NEW: Update and bind global constant buffer ---
+    UpdateGlobalConstantBuffer();
+    ID3D12DescriptorHeap* heaps[] = { m_cbvSrvUavHeap.Get() };
+    m_commandList->SetDescriptorHeaps(1, heaps);
+    m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart());
 
-    // Draw triangle
-    m_commandList->DrawInstanced(3, 1, 0, 0);
+    // --- Draw cubes ---
+    // TODO: set model matrix for cube1 in constant buffer
+    cube1.Draw(m_commandList.Get());
+    // TODO: set model matrix for cube2 in constant buffer
+    cube2.Draw(m_commandList.Get());
 
     // Transition back buffer to present
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;

@@ -18,9 +18,9 @@ struct Transform
     void SetRotation(float pitch, float yaw, float roll)
     {
         rotation = Quaternion::CreateFromYawPitchRoll(
-            DirectX::XMConvertToRadians(yaw),
-            DirectX::XMConvertToRadians(pitch),
-            DirectX::XMConvertToRadians(roll));
+            yaw,
+            pitch,
+            roll);
     }
 
     void SetRotationQuaternion(float x, float y, float z, float w)
