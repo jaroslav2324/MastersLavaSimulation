@@ -1,10 +1,6 @@
 #pragma once
 
-#include <windows.h>
-#include <wrl.h>
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <cstdint>
+#include "inc.h"
 
 #include "Camera.h"
 #include "Cube.h"
@@ -39,9 +35,6 @@ private:
 	void CreateDescriptorHeaps();
 	void CreateRenderTargetViews();
 	void CreateDepthStencil();
-
-	void CreateTriangleResources();
-	void RenderTriangle();
 
 	Microsoft::WRL::ComPtr<ID3D12Device> m_device;
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_commandQueue;
@@ -86,6 +79,9 @@ private:
 
 	void CreateGlobalConstantBuffer();
 	void UpdateGlobalConstantBuffer();
+
+	// NEW: create root signature and pipeline state
+	void CreateRootSignatureAndPipeline();
 
 	Cube cube1;
 	Cube cube2;

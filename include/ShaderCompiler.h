@@ -1,9 +1,6 @@
 #pragma once
 
-#include <d3d12.h>
-#include <wrl/client.h>
-#include <string>
-#include <vector>
+#include "inc.h"
 
 class ShaderCompiler
 {

@@ -5,6 +5,7 @@
 #include <SimpleMath.h>
 
 #include "ShaderCompiler.h"
+#include <d3dcompiler.h>
 
 void RenderSubsystem::Initialize()
 {
@@ -20,23 +21,25 @@ void RenderSubsystem::Initialize()
     CreateRenderTargetViews();
     CreateDepthStencil();
 
-    // --- NEW: Camera and cubes ---
     camera = Camera();
-    cube1 = Cube(m_device.Get());
-    cube2 = Cube(m_device.Get());
+
+    cube1.Initialize(m_device.Get(), m_commandList.Get());
+    cube2.Initialize(m_device.Get(), m_commandList.Get());
 
     cube1.GetTransform().position = Vector3(-1.0f, 0.0f, 0.0f);
     cube2.GetTransform().position = Vector3(1.0f, 0.0f, 0.0f);
 
-    cube1.Initialize(m_commandList.Get());
-    cube2.Initialize(m_commandList.Get());
-
-    // --- NEW: Create global constant buffer ---
     CreateGlobalConstantBuffer();
 
-    // --- NEW: Create cube constant buffers ---
     cube1.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 1);
     cube2.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 2);
+
+    // NEW: create root signature and pipeline state so m_rootSignature and m_pipelineState are valid for Draw()
+    CreateRootSignatureAndPipeline();
+
+    m_commandList->Close();
+    ID3D12CommandList *ppCommandLists[] = {m_commandList.Get()};
+    m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 }
 
 // --- NEW: Create global constant buffer ---
@@ -94,9 +97,9 @@ void RenderSubsystem::UpdateGlobalConstantBuffer()
     m_globalConstants.farPlane = 100.0f;
 
     // Map and copy data
-    UINT8* pData;
+    UINT8 *pData;
     D3D12_RANGE readRange = {0, 0};
-    HRESULT hr = m_globalConstantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pData));
+    HRESULT hr = m_globalConstantBuffer->Map(0, &readRange, reinterpret_cast<void **>(&pData));
     if (FAILED(hr))
         throw std::runtime_error("Failed to map global constant buffer.");
     memcpy(pData, &m_globalConstants, sizeof(GlobalConstants));
@@ -224,7 +227,7 @@ void RenderSubsystem::CreateCommandQueueAndList()
         throw std::runtime_error("Failed to create command list.");
 
     // Command lists are created in the recording state. Close it for now.
-    m_commandList->Close();
+    // m_commandList->Close();
 }
 
 void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height)
@@ -438,7 +441,6 @@ void RenderSubsystem::Draw()
         }
     }
 
-    // --- NEW: Render cubes ---
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
@@ -485,14 +487,11 @@ void RenderSubsystem::Draw()
 
     // --- NEW: Update and bind global constant buffer ---
     UpdateGlobalConstantBuffer();
-    ID3D12DescriptorHeap* heaps[] = { m_cbvSrvUavHeap.Get() };
+    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap.Get()};
     m_commandList->SetDescriptorHeaps(1, heaps);
     m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart());
 
-    // --- Draw cubes ---
-    // TODO: set model matrix for cube1 in constant buffer
     cube1.Draw(m_commandList.Get());
-    // TODO: set model matrix for cube2 in constant buffer
     cube2.Draw(m_commandList.Get());
 
     // Transition back buffer to present
@@ -518,4 +517,105 @@ void RenderSubsystem::Draw()
         WaitForSingleObject(eventHandle, INFINITE);
         CloseHandle(eventHandle);
     }
+}
+
+// test pipline
+void RenderSubsystem::CreateRootSignatureAndPipeline()
+{
+    // Descriptor table for CBVs (global + two per-object)
+    D3D12_DESCRIPTOR_RANGE cbvRange = {};
+    cbvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    cbvRange.NumDescriptors = 3; // b0 (global) + b1,b2 (per-object)
+    cbvRange.BaseShaderRegister = 0;
+    cbvRange.RegisterSpace = 0;
+    cbvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER rootParam = {};
+    rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParam.DescriptorTable.NumDescriptorRanges = 1;
+    rootParam.DescriptorTable.pDescriptorRanges = &cbvRange;
+    rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+    rootSignatureDesc.NumParameters = 1;
+    rootSignatureDesc.pParameters = &rootParam;
+    rootSignatureDesc.NumStaticSamplers = 0;
+    rootSignatureDesc.pStaticSamplers = nullptr;
+    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serializedRootSig, &errorBlob);
+    if (FAILED(hr))
+    {
+        if (errorBlob)
+            OutputDebugStringA((char *)errorBlob->GetBufferPointer());
+        throw std::runtime_error("Failed to serialize root signature.");
+    }
+
+    hr = m_device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
+    if (FAILED(hr))
+        throw std::runtime_error("Failed to create root signature.");
+
+    // Simple HLSL shaders (vertex expects POSITION semantic)
+    const char *vsSrc =
+        "cbuffer Globals : register(b0) { matrix view; matrix proj; float nearPlane; float farPlane; float pad0; float pad1; };\n"
+        "struct VSInput { float3 position : POSITION; };\n"
+        "struct VSOutput { float4 position : SV_POSITION; };\n"
+        "VSOutput VSMain(VSInput vin) { VSOutput vout; float4 p = float4(vin.position, 1.0f); vout.position = mul(mul(p, view), proj); return vout; }\n";
+
+    const char *psSrc =
+        "float4 PSMain() : SV_Target { return float4(0.8f, 0.6f, 0.3f, 1.0f); }\n";
+
+    Microsoft::WRL::ComPtr<ID3DBlob> vsBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> psBlob;
+
+    UINT compileFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+#if defined(_DEBUG)
+    compileFlags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+    compileFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+
+    hr = D3DCompile(vsSrc, strlen(vsSrc), nullptr, nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vsBlob, &errorBlob);
+    if (FAILED(hr))
+    {
+        if (errorBlob)
+            OutputDebugStringA((char *)errorBlob->GetBufferPointer());
+        throw std::runtime_error("Failed to compile vertex shader.");
+    }
+
+    hr = D3DCompile(psSrc, strlen(psSrc), nullptr, nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &psBlob, &errorBlob);
+    if (FAILED(hr))
+    {
+        if (errorBlob)
+            OutputDebugStringA((char *)errorBlob->GetBufferPointer());
+        throw std::runtime_error("Failed to compile pixel shader.");
+    }
+
+    // Input layout: POSITION only (adjust if your vertex format differs)
+    D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+        {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+        };
+
+    // PSO description
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+    psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
+    psoDesc.pRootSignature = m_rootSignature.Get();
+    psoDesc.VS = {vsBlob->GetBufferPointer(), vsBlob->GetBufferSize()};
+    psoDesc.PS = {psBlob->GetBufferPointer(), psBlob->GetBufferSize()};
+    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.SampleMask = UINT_MAX;
+    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets = 1;
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    psoDesc.SampleDesc.Count = 1;
+
+    hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+    if (FAILED(hr))
+        throw std::runtime_error("Failed to create pipeline state.");
 }

@@ -1,7 +1,6 @@
 #pragma once
-#include <d3d12.h>
-#include <wrl/client.h>
-#include <SimpleMath.h>
+
+#include "inc.h"
 
 #include "Transform.h"
 #include "CubeConstBuffer.h"
@@ -14,7 +13,7 @@ class Cube
 private:
     struct Vertex
     {
-        Vector3 position;
+        Vector4 position;
     };
 
     ID3D12Device *device;
@@ -28,16 +27,17 @@ private:
     ComPtr<ID3D12Resource> m_constBuffer;
     D3D12_GPU_VIRTUAL_ADDRESS m_constBufferAddress;
     D3D12_CPU_DESCRIPTOR_HANDLE m_constBufferView{};
+    D3D12_GPU_DESCRIPTOR_HANDLE m_constBufferGPUHandle{}; // GPU handle for root descriptor table
     CubeConstBuffer m_constBufferData;
 
 public:
-    Cube(ID3D12Device *dev);
-    ~Cube() = default; // ComPtr автоматически освободит ресурсы
+    Cube() = default;
+    ~Cube() = default;
 
-    void Initialize(ID3D12GraphicsCommandList *cmdList);
+    void Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *cmdList);
     void Draw(ID3D12GraphicsCommandList *commandList);
 
-    void CreateConstBuffer(ID3D12Device* device, ID3D12DescriptorHeap* heap, UINT heapIndex);
+    void CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, UINT heapIndex);
     void UpdateConstBuffer();
 
     Transform &GetTransform() { return transform; }
