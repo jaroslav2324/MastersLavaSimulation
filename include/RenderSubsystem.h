@@ -4,6 +4,8 @@
 
 #include "Camera.h"
 #include "Cube.h"
+#include "InputHandler.h"
+#include <chrono>
 
 using namespace DirectX::SimpleMath;
 
@@ -82,6 +84,17 @@ private:
 
 	// NEW: create root signature and pipeline state
 	void CreateRootSignatureAndPipeline();
+
+	// NEW: input & camera handling
+	static LRESULT CALLBACK StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+	// Camera / input state
+	// timing
+	std::chrono::steady_clock::time_point m_lastFrameTime;
+
+	// Input handler will update the camera
+	InputHandler m_inputHandler;
 
 	Cube cube1;
 	Cube cube2;

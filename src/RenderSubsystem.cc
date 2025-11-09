@@ -7,8 +7,16 @@
 #include "ShaderCompiler.h"
 #include <d3dcompiler.h>
 
+#include <chrono> // NEW: for delta time
+
+// NEW: instance pointer for StaticWndProc forwarding
+static RenderSubsystem *g_renderInstance = nullptr;
+
 void RenderSubsystem::Initialize()
 {
+    // set global instance early so WndProc can forward messages
+    g_renderInstance = this;
+
     m_width = 800;
     m_height = 600;
     m_windowHandle = CreateMainWindow(GetModuleHandle(nullptr), (int)m_width, (int)m_height, L"DX12 Window");
@@ -21,13 +29,15 @@ void RenderSubsystem::Initialize()
     CreateRenderTargetViews();
     CreateDepthStencil();
 
+    // initialize timing and camera
+    m_lastFrameTime = std::chrono::steady_clock::now();
     camera = Camera();
 
     cube1.Initialize(m_device.Get(), m_commandList.Get());
     cube2.Initialize(m_device.Get(), m_commandList.Get());
 
-    cube1.GetTransform().position = Vector3(-1.0f, 0.0f, 0.0f);
-    cube2.GetTransform().position = Vector3(1.0f, 0.0f, 0.0f);
+    cube1.GetTransform().position = Vector3(-1.0f, 0.0f, -5.0f);
+    cube2.GetTransform().position = Vector3(2.0f, 0.0f, -5.0f);
 
     CreateGlobalConstantBuffer();
 
@@ -89,8 +99,9 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
 // --- NEW: Update global constant buffer ---
 void RenderSubsystem::UpdateGlobalConstantBuffer()
 {
-    // Fill global constants
-    m_globalConstants.view = camera.GetViewMatrix();
+    // Use Camera class to build view matrix
+    Matrix view = camera.GetViewMatrix();
+    m_globalConstants.view = view;
     m_globalConstants.proj = Matrix::CreatePerspectiveFieldOfView(
         DirectX::XMConvertToRadians(60.0f), float(m_width) / float(m_height), 0.1f, 100.0f);
     m_globalConstants.nearPlane = 0.1f;
@@ -264,8 +275,8 @@ void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height
 HWND RenderSubsystem::CreateMainWindow(HINSTANCE hInstance, int width, int height, LPCWSTR windowName)
 {
     // Define window class
-    WNDCLASSW wc = {};               // Use WNDCLASSW for wide strings
-    wc.lpfnWndProc = DefWindowProcW; // Use DefWindowProcW for wide strings
+    WNDCLASSW wc = {};              // Use WNDCLASSW for wide strings
+    wc.lpfnWndProc = StaticWndProc; // NEW: custom WndProc
     wc.hInstance = hInstance;
     wc.lpszClassName = L"DX12WindowClass";
     wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
@@ -427,6 +438,16 @@ void RenderSubsystem::Shutdown()
 
 void RenderSubsystem::Draw()
 {
+    // compute delta time and process input
+    auto now = std::chrono::steady_clock::now();
+    float deltaSeconds = std::chrono::duration<float>(now - m_lastFrameTime).count();
+    if (deltaSeconds > 0.1f)
+        deltaSeconds = 0.1f; // clamp large deltas
+    m_lastFrameTime = now;
+
+    // let input handler update camera
+    m_inputHandler.ProcessInput(deltaSeconds, camera);
+
     // Wait for previous frame to finish
     if (m_commandQueue && m_fence)
     {
@@ -522,23 +543,37 @@ void RenderSubsystem::Draw()
 // test pipline
 void RenderSubsystem::CreateRootSignatureAndPipeline()
 {
-    // Descriptor table for CBVs (global + two per-object)
-    D3D12_DESCRIPTOR_RANGE cbvRange = {};
-    cbvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    cbvRange.NumDescriptors = 3; // b0 (global) + b1,b2 (per-object)
-    cbvRange.BaseShaderRegister = 0;
-    cbvRange.RegisterSpace = 0;
-    cbvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    // --- changed: create two descriptor ranges (b0 global, b1 per-object) ---
+    D3D12_DESCRIPTOR_RANGE cbvRange0 = {};
+    cbvRange0.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    cbvRange0.NumDescriptors = 1; // global CB (b0)
+    cbvRange0.BaseShaderRegister = 0;
+    cbvRange0.RegisterSpace = 0;
+    cbvRange0.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParam = {};
-    rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParam.DescriptorTable.NumDescriptorRanges = 1;
-    rootParam.DescriptorTable.pDescriptorRanges = &cbvRange;
-    rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    D3D12_DESCRIPTOR_RANGE cbvRange1 = {};
+    cbvRange1.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    cbvRange1.NumDescriptors = 1; // per-object CB (b1)
+    cbvRange1.BaseShaderRegister = 1;
+    cbvRange1.RegisterSpace = 0;
+    cbvRange1.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    // Two root parameters: [0]=globals table, [1]=per-object table
+    D3D12_ROOT_PARAMETER rootParams[2] = {};
+
+    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
+    rootParams[0].DescriptorTable.pDescriptorRanges = &cbvRange0;
+    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParams[1].DescriptorTable.NumDescriptorRanges = 1;
+    rootParams[1].DescriptorTable.pDescriptorRanges = &cbvRange1;
+    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-    rootSignatureDesc.NumParameters = 1;
-    rootSignatureDesc.pParameters = &rootParam;
+    rootSignatureDesc.NumParameters = _countof(rootParams);
+    rootSignatureDesc.pParameters = rootParams;
     rootSignatureDesc.NumStaticSamplers = 0;
     rootSignatureDesc.pStaticSamplers = nullptr;
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -557,54 +592,41 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create root signature.");
 
-    // Simple HLSL shaders (vertex expects POSITION semantic)
-    const char *vsSrc =
-        "cbuffer Globals : register(b0) { matrix view; matrix proj; float nearPlane; float farPlane; float pad0; float pad1; };\n"
-        "struct VSInput { float3 position : POSITION; };\n"
-        "struct VSOutput { float4 position : SV_POSITION; };\n"
-        "VSOutput VSMain(VSInput vin) { VSOutput vout; float4 p = float4(vin.position, 1.0f); vout.position = mul(mul(p, view), proj); return vout; }\n";
-
-    const char *psSrc =
-        "float4 PSMain() : SV_Target { return float4(0.8f, 0.6f, 0.3f, 1.0f); }\n";
-
-    Microsoft::WRL::ComPtr<ID3DBlob> vsBlob;
-    Microsoft::WRL::ComPtr<ID3DBlob> psBlob;
-
-    UINT compileFlags = D3DCOMPILE_ENABLE_STRICTNESS;
-#if defined(_DEBUG)
-    compileFlags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-    compileFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
-#endif
-
-    hr = D3DCompile(vsSrc, strlen(vsSrc), nullptr, nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vsBlob, &errorBlob);
-    if (FAILED(hr))
+    // --- changed: compile shaders from file using ShaderCompiler ---
+    auto vsResult = ShaderCompiler::CompileFromFile(
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        "VSMain",
+        "vs_5_0");
+    if (!vsResult.success)
     {
-        if (errorBlob)
-            OutputDebugStringA((char *)errorBlob->GetBufferPointer());
-        throw std::runtime_error("Failed to compile vertex shader.");
+        if (vsResult.error)
+            OutputDebugStringA((char *)vsResult.error->GetBufferPointer());
+        throw std::runtime_error("Failed to compile vertex shader from file.");
     }
 
-    hr = D3DCompile(psSrc, strlen(psSrc), nullptr, nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &psBlob, &errorBlob);
-    if (FAILED(hr))
+    auto psResult = ShaderCompiler::CompileFromFile(
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        "PSMain",
+        "ps_5_0");
+    if (!psResult.success)
     {
-        if (errorBlob)
-            OutputDebugStringA((char *)errorBlob->GetBufferPointer());
-        throw std::runtime_error("Failed to compile pixel shader.");
+        if (psResult.error)
+            OutputDebugStringA((char *)psResult.error->GetBufferPointer());
+        throw std::runtime_error("Failed to compile pixel shader from file.");
     }
 
-    // Input layout: POSITION only (adjust if your vertex format differs)
+    // Input layout: POSITION as float4 to match Cube vertex (Vector4)
     D3D12_INPUT_ELEMENT_DESC inputLayout[] =
         {
-            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
         };
 
     // PSO description
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
     psoDesc.pRootSignature = m_rootSignature.Get();
-    psoDesc.VS = {vsBlob->GetBufferPointer(), vsBlob->GetBufferSize()};
-    psoDesc.PS = {psBlob->GetBufferPointer(), psBlob->GetBufferSize()};
+    psoDesc.VS = {vsResult.bytecode->GetBufferPointer(), vsResult.bytecode->GetBufferSize()};
+    psoDesc.PS = {psResult.bytecode->GetBufferPointer(), psResult.bytecode->GetBufferSize()};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -619,3 +641,63 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create pipeline state.");
 }
+
+// NEW: static WndProc forwards to instance
+LRESULT CALLBACK RenderSubsystem::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (g_renderInstance)
+        return g_renderInstance->WndProc(hwnd, msg, wParam, lParam);
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+LRESULT RenderSubsystem::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+
+    case WM_KEYDOWN:
+        m_inputHandler.OnKeyDown(wParam);
+        return 0;
+    case WM_KEYUP:
+        m_inputHandler.OnKeyUp(wParam);
+        return 0;
+
+    case WM_MOUSEMOVE:
+    {
+        int x = (int)(short)LOWORD(lParam);
+        int y = (int)(short)HIWORD(lParam);
+        m_inputHandler.OnMouseMove(x, y);
+        return 0;
+    }
+
+    case WM_LBUTTONDOWN:
+        SetCapture(hwnd);
+        return 0;
+    case WM_LBUTTONUP:
+        ReleaseCapture();
+        return 0;
+
+    case WM_RBUTTONDOWN:
+    {
+        SetCapture(hwnd);
+        int x = (int)(short)LOWORD(lParam);
+        int y = (int)(short)HIWORD(lParam);
+        m_inputHandler.OnMouseDown(true, x, y);
+        return 0;
+    }
+    case WM_RBUTTONUP:
+        ReleaseCapture();
+        m_inputHandler.OnMouseUp(true);
+        return 0;
+
+    default:
+        break;
+    }
+
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Input handling is now delegated to InputHandler

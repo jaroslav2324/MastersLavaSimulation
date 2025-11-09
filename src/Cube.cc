@@ -7,14 +7,14 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
     device = dev;
 
     Vertex vertices[] = {
-        {Vector4(-0.5f, -0.5f, -0.5f, 0.0f)},
-        {Vector4(-0.5f, 0.5f, -0.5f, 0.0f)},
-        {Vector4(0.5f, 0.5f, -0.5f, 0.0f)},
-        {Vector4(0.5f, -0.5f, -0.5f, 0.0f)},
-        {Vector4(-0.5f, -0.5f, 0.5f, 0.0f)},
-        {Vector4(-0.5f, 0.5f, 0.5f, 0.0f)},
-        {Vector4(0.5f, 0.5f, 0.5f, 0.0f)},
-        {Vector4(0.5f, -0.5f, 0.5f, 0.0f)}};
+        {Vector4(-0.5f, -0.5f, -0.5f, 1.0f)},
+        {Vector4(-0.5f, 0.5f, -0.5f, 1.0f)},
+        {Vector4(0.5f, 0.5f, -0.5f, 1.0f)},
+        {Vector4(0.5f, -0.5f, -0.5f, 1.0f)},
+        {Vector4(-0.5f, -0.5f, 0.5f, 1.0f)},
+        {Vector4(-0.5f, 0.5f, 0.5f, 1.0f)},
+        {Vector4(0.5f, 0.5f, 0.5f, 1.0f)},
+        {Vector4(0.5f, -0.5f, 0.5f, 1.0f)}};
 
     const UINT vertexBufferSize = sizeof(vertices);
 

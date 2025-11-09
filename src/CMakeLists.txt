@@ -5,6 +5,7 @@ set(SRC_FILES
     src/RenderSubsystem.cc
     src/ShaderCompiler.cc
     src/Cube.cc
+    src/InputHandler.cc
     PARENT_SCOPE 
 )
 
