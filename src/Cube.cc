@@ -18,7 +18,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
 
     const UINT vertexBufferSize = sizeof(vertices);
 
-    D3D12_HEAP_PROPERTIES defaultHeap = GetDefaultHeapProperties();
+    D3D12_HEAP_PROPERTIES defaultHeap = MakeHeapProperties(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC vertexBufDesc = GetBufferResourceDesc(vertexBufferSize);
 
     device->CreateCommittedResource(
@@ -29,7 +29,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         nullptr,
         IID_PPV_ARGS(&vertexBuffer));
 
-    D3D12_HEAP_PROPERTIES uploadHeap = GetUploadHeapProperties();
+    D3D12_HEAP_PROPERTIES uploadHeap = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
 
     device->CreateCommittedResource(
         &uploadHeap,
@@ -66,7 +66,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
     const UINT indexBufferSize = sizeof(indices);
 
     D3D12_RESOURCE_DESC indexBufDesc = GetBufferResourceDesc(indexBufferSize);
-    D3D12_HEAP_PROPERTIES defaultHeapForIndex = GetDefaultHeapProperties();
+    D3D12_HEAP_PROPERTIES defaultHeapForIndex = MakeHeapProperties(D3D12_HEAP_TYPE_DEFAULT);
 
     device->CreateCommittedResource(
         &defaultHeapForIndex,
@@ -76,7 +76,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         nullptr,
         IID_PPV_ARGS(&indexBuffer));
 
-    D3D12_HEAP_PROPERTIES uploadHeapForIndex = GetUploadHeapProperties();
+    D3D12_HEAP_PROPERTIES uploadHeapForIndex = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
 
     device->CreateCommittedResource(
         &uploadHeapForIndex,
@@ -103,7 +103,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
 
 void Cube::CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, UINT heapIndex)
 {
-    D3D12_HEAP_PROPERTIES heapProps = GetUploadHeapProperties();
+    D3D12_HEAP_PROPERTIES heapProps = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
     D3D12_RESOURCE_DESC cbDesc = GetBufferResourceDesc((sizeof(CubeConstBuffer) + 255) & ~255);
 
     device->CreateCommittedResource(

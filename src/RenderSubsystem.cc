@@ -1,21 +1,38 @@
 #include "RenderSubsystem.h"
 
+#include <chrono>
 #include <stdexcept>
+#include <cassert>
 
 #include <SimpleMath.h>
 
 #include "ShaderCompiler.h"
-#include <d3dcompiler.h>
 
-#include <chrono> // NEW: for delta time
+#include "RenderTemplatesAPI.h"
 
-// NEW: instance pointer for StaticWndProc forwarding
-static RenderSubsystem *g_renderInstance = nullptr;
+RenderSubsystem *RenderSubsystem::s_instance = nullptr;
+
+ID3D12DescriptorHeap *RenderSubsystem::GetCBVSRVUAVHeap()
+{
+    assert(s_instance && "RenderSubsystem instance is null in GetCBVSRVUAVHeap");
+    return s_instance->m_cbvSrvUavHeap.Get();
+}
+
+UINT RenderSubsystem::GetCBVSRVUAVDescriptorSize()
+{
+    assert(s_instance && "RenderSubsystem instance is null in GetCBVSRVUAVDescriptorSize");
+    return s_instance->m_cbvSrvUavDescriptorSize;
+}
+
+ID3D12CommandQueue *RenderSubsystem::GetCommandQueue()
+{
+    assert(s_instance && "RenderSubsystem instance is null in GetCommandQueue");
+    return s_instance->m_commandQueue.Get();
+}
 
 void RenderSubsystem::Initialize()
 {
-    // set global instance early so WndProc can forward messages
-    g_renderInstance = this;
+    s_instance = this;
 
     m_width = 800;
     m_height = 600;
@@ -44,7 +61,6 @@ void RenderSubsystem::Initialize()
     cube1.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 1);
     cube2.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 2);
 
-    // NEW: create root signature and pipeline state so m_rootSignature and m_pipelineState are valid for Draw()
     CreateRootSignatureAndPipeline();
 
     m_commandList->Close();
@@ -52,10 +68,9 @@ void RenderSubsystem::Initialize()
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 }
 
-// --- NEW: Create global constant buffer ---
 void RenderSubsystem::CreateGlobalConstantBuffer()
 {
-    // Create upload heap for constant buffer
+    // TODO: replace with helper function
     D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
     heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
@@ -63,6 +78,7 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
     heapProps.CreationNodeMask = 1;
     heapProps.VisibleNodeMask = 1;
 
+    // TODO: replace with helper function
     D3D12_RESOURCE_DESC cbDesc = {};
     cbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
     cbDesc.Alignment = 0;
@@ -96,7 +112,6 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
     m_device->CreateConstantBufferView(&cbvDesc, m_globalCBV);
 }
 
-// --- NEW: Update global constant buffer ---
 void RenderSubsystem::UpdateGlobalConstantBuffer()
 {
     // Use Camera class to build view matrix
@@ -154,7 +169,7 @@ void RenderSubsystem::CreateDevice()
         // Try to create device
         hr = D3D12CreateDevice(
             hardwareAdapter.Get(),
-            D3D_FEATURE_LEVEL_11_0, // TODO: replace to 12_0?
+            D3D_FEATURE_LEVEL_11_0,
             IID_PPV_ARGS(&m_device));
 
         if (SUCCEEDED(hr))
@@ -305,6 +320,7 @@ HWND RenderSubsystem::CreateMainWindow(HINSTANCE hInstance, int width, int heigh
 
 void RenderSubsystem::CreateDescriptorHeaps()
 {
+    // TODO: replace with helper function
     // RTV Heap
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
     rtvHeapDesc.NumDescriptors = FrameCount; // One RTV per swap chain buffer
@@ -314,6 +330,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create RTV descriptor heap.");
 
+    // TODO: replace with helper function
     // DSV Heap
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
     dsvHeapDesc.NumDescriptors = 1; // Usually one DSV
@@ -323,6 +340,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DSV descriptor heap.");
 
+    // TODO: replace with helper function
     // CBV/SRV/UAV Heap (shader-visible)
     D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
     cbvSrvUavHeapDesc.NumDescriptors = 64; // Adjust as needed for your resources
@@ -373,7 +391,7 @@ void RenderSubsystem::CreateDepthStencil()
     clearValue.DepthStencil.Depth = 1.0f;
     clearValue.DepthStencil.Stencil = 0;
 
-    // Use explicit heap properties so d3dx12.h is not required
+    // TODO: replace with helper function
     D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
     heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
@@ -438,14 +456,12 @@ void RenderSubsystem::Shutdown()
 
 void RenderSubsystem::Draw()
 {
-    // compute delta time and process input
     auto now = std::chrono::steady_clock::now();
     float deltaSeconds = std::chrono::duration<float>(now - m_lastFrameTime).count();
     if (deltaSeconds > 0.1f)
         deltaSeconds = 0.1f; // clamp large deltas
     m_lastFrameTime = now;
 
-    // let input handler update camera
     m_inputHandler.ProcessInput(deltaSeconds, camera);
 
     // Wait for previous frame to finish
@@ -499,14 +515,11 @@ void RenderSubsystem::Draw()
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
     m_commandList->ClearDepthStencilView(m_dsvHeapStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    // Set pipeline state and root signature
     m_commandList->SetPipelineState(m_pipelineState.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 
-    // Set primitive topology
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // --- NEW: Update and bind global constant buffer ---
     UpdateGlobalConstantBuffer();
     ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap.Get()};
     m_commandList->SetDescriptorHeaps(1, heaps);
@@ -520,12 +533,10 @@ void RenderSubsystem::Draw()
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
     m_commandList->ResourceBarrier(1, &barrier);
 
-    // Close and execute command list
     m_commandList->Close();
     ID3D12CommandList *ppCommandLists[] = {m_commandList.Get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
-    // Present
     m_swapChain->Present(1, 0);
 
     // Wait for GPU (simple sync)
@@ -543,34 +554,13 @@ void RenderSubsystem::Draw()
 // test pipline
 void RenderSubsystem::CreateRootSignatureAndPipeline()
 {
-    // --- changed: create two descriptor ranges (b0 global, b1 per-object) ---
-    D3D12_DESCRIPTOR_RANGE cbvRange0 = {};
-    cbvRange0.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    cbvRange0.NumDescriptors = 1; // global CB (b0)
-    cbvRange0.BaseShaderRegister = 0;
-    cbvRange0.RegisterSpace = 0;
-    cbvRange0.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    D3D12_DESCRIPTOR_RANGE ranges[2] = {CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0),
+                                        CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1)};
 
-    D3D12_DESCRIPTOR_RANGE cbvRange1 = {};
-    cbvRange1.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    cbvRange1.NumDescriptors = 1; // per-object CB (b1)
-    cbvRange1.BaseShaderRegister = 1;
-    cbvRange1.RegisterSpace = 0;
-    cbvRange1.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    D3D12_ROOT_PARAMETER rootParams[2] = {CreateDescriptorTableRootParam(&ranges[0], 1, D3D12_SHADER_VISIBILITY_ALL),
+                                          CreateDescriptorTableRootParam(&ranges[1], 1, D3D12_SHADER_VISIBILITY_ALL)};
 
-    // Two root parameters: [0]=globals table, [1]=per-object table
-    D3D12_ROOT_PARAMETER rootParams[2] = {};
-
-    rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
-    rootParams[0].DescriptorTable.pDescriptorRanges = &cbvRange0;
-    rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParams[1].DescriptorTable.NumDescriptorRanges = 1;
-    rootParams[1].DescriptorTable.pDescriptorRanges = &cbvRange1;
-    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
+    // TODO: replace with helper function
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.NumParameters = _countof(rootParams);
     rootSignatureDesc.pParameters = rootParams;
@@ -645,8 +635,8 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
 // NEW: static WndProc forwards to instance
 LRESULT CALLBACK RenderSubsystem::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (g_renderInstance)
-        return g_renderInstance->WndProc(hwnd, msg, wParam, lParam);
+    if (s_instance)
+        return s_instance->WndProc(hwnd, msg, wParam, lParam);
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 

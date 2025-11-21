@@ -24,8 +24,15 @@ public:
 	void Initialize();
 	void Shutdown();
 	void Draw();
+	// Access the shared CBV/SRV/UAV descriptor heap (shader-visible)
+	static ID3D12DescriptorHeap *GetCBVSRVUAVHeap();
+	static UINT GetCBVSRVUAVDescriptorSize();
+	// Access the main command queue for uploads/compute dispatches
+	static ID3D12CommandQueue* GetCommandQueue();
 
 private:
+	// Global instance pointer for static accessors
+	static RenderSubsystem* s_instance;
 	void CreateDevice();
 	void CreateCommandQueueAndList();
 	void CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height);
