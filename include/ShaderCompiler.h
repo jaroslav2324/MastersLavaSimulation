@@ -7,8 +7,8 @@ class ShaderCompiler
 public:
     struct CompileResult
     {
-        Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
-        Microsoft::WRL::ComPtr<ID3DBlob> error;
+        winrt::com_ptr<ID3DBlob> bytecode;
+        winrt::com_ptr<ID3DBlob> error;
         bool success;
     };
 

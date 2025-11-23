@@ -24,8 +24,8 @@ ShaderCompiler::CompileResult ShaderCompiler::CompileFromFile(
         target.c_str(),
         compileFlags,
         0,
-        &result.bytecode,
-        &result.error
+        result.bytecode.put(),
+        result.error.put()
     );
 
     result.success = SUCCEEDED(hr);

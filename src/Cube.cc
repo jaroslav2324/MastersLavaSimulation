@@ -27,7 +27,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         &vertexBufDesc,
         D3D12_RESOURCE_STATE_COMMON,
         nullptr,
-        IID_PPV_ARGS(&vertexBuffer));
+        IID_PPV_ARGS(vertexBuffer.put()));
 
     D3D12_HEAP_PROPERTIES uploadHeap = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
 
@@ -37,7 +37,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         &vertexBufDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&vertexBufferUpload));
+        IID_PPV_ARGS(vertexBufferUpload.put()));
 
     UINT8 *pVertexData;
     D3D12_RANGE readRange = {0, 0};
@@ -45,9 +45,9 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
     memcpy(pVertexData, vertices, vertexBufferSize);
     vertexBufferUpload->Unmap(0, nullptr);
 
-    commandList->CopyBufferRegion(vertexBuffer.Get(), 0, vertexBufferUpload.Get(), 0, vertexBufferSize);
+    commandList->CopyBufferRegion(vertexBuffer.get(), 0, vertexBufferUpload.get(), 0, vertexBufferSize);
 
-    D3D12_RESOURCE_BARRIER transition = GetTransitionCopyToVertex(vertexBuffer.Get());
+    D3D12_RESOURCE_BARRIER transition = GetTransitionCopyToVertex(vertexBuffer.get());
     commandList->ResourceBarrier(1, &transition);
 
     vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
@@ -74,7 +74,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         &indexBufDesc,
         D3D12_RESOURCE_STATE_COMMON,
         nullptr,
-        IID_PPV_ARGS(&indexBuffer));
+        IID_PPV_ARGS(indexBuffer.put()));
 
     D3D12_HEAP_PROPERTIES uploadHeapForIndex = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
 
@@ -84,16 +84,16 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
         &indexBufDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&indexBufferUpload));
+        IID_PPV_ARGS(indexBufferUpload.put()));
 
     UINT8 *pIndexData;
     indexBufferUpload->Map(0, &readRange, reinterpret_cast<void **>(&pIndexData));
     memcpy(pIndexData, indices, indexBufferSize);
     indexBufferUpload->Unmap(0, nullptr);
 
-    commandList->CopyBufferRegion(indexBuffer.Get(), 0, indexBufferUpload.Get(), 0, indexBufferSize);
+    commandList->CopyBufferRegion(indexBuffer.get(), 0, indexBufferUpload.get(), 0, indexBufferSize);
 
-    D3D12_RESOURCE_BARRIER transitionIndex = GetTransitionCopyToIndex(indexBuffer.Get());
+    D3D12_RESOURCE_BARRIER transitionIndex = GetTransitionCopyToIndex(indexBuffer.get());
     commandList->ResourceBarrier(1, &transitionIndex);
 
     indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
@@ -112,7 +112,7 @@ void Cube::CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, U
         &cbDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&m_constBuffer));
+        IID_PPV_ARGS(m_constBuffer.put()));
 
     m_constBufferAddress = m_constBuffer->GetGPUVirtualAddress();
 

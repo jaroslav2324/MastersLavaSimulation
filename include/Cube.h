@@ -5,7 +5,7 @@
 #include "Transform.h"
 #include "CubeConstBuffer.h"
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 using namespace DirectX::SimpleMath;
 
 class Cube
@@ -17,14 +17,14 @@ private:
     };
 
     ID3D12Device *device;
-    ComPtr<ID3D12Resource> vertexBuffer;
-    ComPtr<ID3D12Resource> vertexBufferUpload;
-    ComPtr<ID3D12Resource> indexBuffer;
-    ComPtr<ID3D12Resource> indexBufferUpload;
+    com_ptr<ID3D12Resource> vertexBuffer;
+    com_ptr<ID3D12Resource> vertexBufferUpload;
+    com_ptr<ID3D12Resource> indexBuffer;
+    com_ptr<ID3D12Resource> indexBufferUpload;
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
     D3D12_INDEX_BUFFER_VIEW indexBufferView;
     Transform transform;
-    ComPtr<ID3D12Resource> m_constBuffer;
+    com_ptr<ID3D12Resource> m_constBuffer;
     D3D12_GPU_VIRTUAL_ADDRESS m_constBufferAddress;
     D3D12_CPU_DESCRIPTOR_HANDLE m_constBufferView{};
     D3D12_GPU_DESCRIPTOR_HANDLE m_constBufferGPUHandle{}; // GPU handle for root descriptor table

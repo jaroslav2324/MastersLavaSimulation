@@ -28,20 +28,20 @@ public:
 
 private:
     // RWStructuredBuffer<Element>
-    inline static Microsoft::WRL::ComPtr<ID3D12Resource> sortBuffers[2];
+    inline static winrt::com_ptr<ID3D12Resource> sortBuffers[2];
     // uint per block * 2 (zeros/ones)
-    inline static Microsoft::WRL::ComPtr<ID3D12Resource> blockCounts;
+    inline static winrt::com_ptr<ID3D12Resource> blockCounts;
     // prefix buffer (uint per block * 2)
-    inline static Microsoft::WRL::ComPtr<ID3D12Resource> prefixBuffer;
+    inline static winrt::com_ptr<ID3D12Resource> prefixBuffer;
     // readback/upload buffers for CPU-GPU exchange
-    inline static Microsoft::WRL::ComPtr<ID3D12Resource> blockCountsReadback;
-    inline static Microsoft::WRL::ComPtr<ID3D12Resource> prefixUpload;
+    inline static winrt::com_ptr<ID3D12Resource> blockCountsReadback;
+    inline static winrt::com_ptr<ID3D12Resource> prefixUpload;
 
     inline static ID3D12DescriptorHeap *m_uavHeap;
     // Compute root signature and PSOs for Count and Scatter kernels
-    inline static Microsoft::WRL::ComPtr<ID3D12RootSignature> m_csRootSig;
-    inline static Microsoft::WRL::ComPtr<ID3D12PipelineState> m_countPSO;
-    inline static Microsoft::WRL::ComPtr<ID3D12PipelineState> m_scatterPSO;
+    inline static winrt::com_ptr<ID3D12RootSignature> m_csRootSig;
+    inline static winrt::com_ptr<ID3D12PipelineState> m_countPSO;
+    inline static winrt::com_ptr<ID3D12PipelineState> m_scatterPSO;
 
     // Create compute root signature and PSOs for Count and Scatter kernels
     static void CreateSortPipelines(ID3D12Device *device);

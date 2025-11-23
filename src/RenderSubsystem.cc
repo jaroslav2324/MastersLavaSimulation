@@ -15,7 +15,7 @@ RenderSubsystem *RenderSubsystem::s_instance = nullptr;
 ID3D12DescriptorHeap *RenderSubsystem::GetCBVSRVUAVHeap()
 {
     assert(s_instance && "RenderSubsystem instance is null in GetCBVSRVUAVHeap");
-    return s_instance->m_cbvSrvUavHeap.Get();
+    return s_instance->m_cbvSrvUavHeap.get();
 }
 
 UINT RenderSubsystem::GetCBVSRVUAVDescriptorSize()
@@ -27,11 +27,19 @@ UINT RenderSubsystem::GetCBVSRVUAVDescriptorSize()
 ID3D12CommandQueue *RenderSubsystem::GetCommandQueue()
 {
     assert(s_instance && "RenderSubsystem instance is null in GetCommandQueue");
-    return s_instance->m_commandQueue.Get();
+    return s_instance->m_commandQueue.get();
+}
+
+winrt::com_ptr<ID3D12Device> RenderSubsystem::GetDevice()
+{
+    return m_device;
 }
 
 void RenderSubsystem::Initialize()
 {
+    if (s_instance)
+        throw std::runtime_error("RenderSubsystem already initialized.");
+
     s_instance = this;
 
     m_width = 800;
@@ -50,22 +58,24 @@ void RenderSubsystem::Initialize()
     m_lastFrameTime = std::chrono::steady_clock::now();
     camera = Camera();
 
-    cube1.Initialize(m_device.Get(), m_commandList.Get());
-    cube2.Initialize(m_device.Get(), m_commandList.Get());
+    cube1.Initialize(m_device.get(), m_commandList.get());
+    cube2.Initialize(m_device.get(), m_commandList.get());
 
     cube1.GetTransform().position = Vector3(-1.0f, 0.0f, -5.0f);
     cube2.GetTransform().position = Vector3(2.0f, 0.0f, -5.0f);
 
     CreateGlobalConstantBuffer();
 
-    cube1.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 1);
-    cube2.CreateConstBuffer(m_device.Get(), m_cbvSrvUavHeap.Get(), 2);
+    cube1.CreateConstBuffer(m_device.get(), m_cbvSrvUavHeap.get(), 1);
+    cube2.CreateConstBuffer(m_device.get(), m_cbvSrvUavHeap.get(), 2);
 
     CreateRootSignatureAndPipeline();
 
     m_commandList->Close();
-    ID3D12CommandList *ppCommandLists[] = {m_commandList.Get()};
+    ID3D12CommandList *ppCommandLists[] = {m_commandList.get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
+    // ParticleSystem::Init(m_device.get());
 }
 
 void RenderSubsystem::CreateGlobalConstantBuffer()
@@ -98,7 +108,7 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
         &cbDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&m_globalConstantBuffer));
+        IID_PPV_ARGS(m_globalConstantBuffer.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create global constant buffer.");
 
@@ -137,8 +147,8 @@ void RenderSubsystem::CreateDevice()
 #if defined(DEBUG) || defined(_DEBUG)
 
     {
-        Microsoft::WRL::ComPtr<ID3D12Debug> debugController;
-        if (FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+        winrt::com_ptr<ID3D12Debug> debugController;
+        if (FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(debugController.put()))))
         {
             throw std::runtime_error("Failed to get D3D12 debug interface.");
         }
@@ -146,15 +156,15 @@ void RenderSubsystem::CreateDevice()
     }
 #endif
 
-    Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
-    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    winrt::com_ptr<IDXGIFactory4> factory;
+    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DXGI Factory.");
 
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> hardwareAdapter;
+    winrt::com_ptr<IDXGIAdapter1> hardwareAdapter;
     for (UINT adapterIndex = 0;; ++adapterIndex)
     {
-        if (DXGI_ERROR_NOT_FOUND == factory->EnumAdapters1(adapterIndex, &hardwareAdapter))
+        if (DXGI_ERROR_NOT_FOUND == factory->EnumAdapters1(adapterIndex, hardwareAdapter.put()))
         {
             break; // No more adapters to enumerate.
         }
@@ -168,9 +178,9 @@ void RenderSubsystem::CreateDevice()
 
         // Try to create device
         hr = D3D12CreateDevice(
-            hardwareAdapter.Get(),
+            hardwareAdapter.get(),
             D3D_FEATURE_LEVEL_11_0,
-            IID_PPV_ARGS(&m_device));
+            IID_PPV_ARGS(m_device.put()));
 
         if (SUCCEEDED(hr))
             break;
@@ -179,12 +189,12 @@ void RenderSubsystem::CreateDevice()
     // Fallback to WARP device if no hardware adapter found
     if (!m_device)
     {
-        Microsoft::WRL::ComPtr<IDXGIAdapter> warpAdapter;
-        factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter));
+        winrt::com_ptr<IDXGIAdapter> warpAdapter;
+        factory->EnumWarpAdapter(IID_PPV_ARGS(warpAdapter.put()));
         hr = D3D12CreateDevice(
-            warpAdapter.Get(),
+            warpAdapter.get(),
             D3D_FEATURE_LEVEL_11_0,
-            IID_PPV_ARGS(&m_device));
+            IID_PPV_ARGS(m_device.put()));
         if (FAILED(hr))
             throw std::runtime_error("Failed to create D3D12 device.");
     }
@@ -195,7 +205,7 @@ void RenderSubsystem::CreateDevice()
 
 void RenderSubsystem::CreateFence()
 {
-    HRESULT hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
+    HRESULT hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create fence.");
 }
@@ -231,14 +241,14 @@ void RenderSubsystem::CreateCommandQueueAndList()
     D3D12_COMMAND_QUEUE_DESC queueDesc = {};
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    HRESULT hr = m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue));
+    HRESULT hr = m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(m_commandQueue.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create command queue.");
 
     // Create command allocator
     hr = m_device->CreateCommandAllocator(
         D3D12_COMMAND_LIST_TYPE_DIRECT,
-        IID_PPV_ARGS(&m_commandAllocator));
+        IID_PPV_ARGS(m_commandAllocator.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create command allocator.");
 
@@ -246,9 +256,9 @@ void RenderSubsystem::CreateCommandQueueAndList()
     hr = m_device->CreateCommandList(
         0,
         D3D12_COMMAND_LIST_TYPE_DIRECT,
-        m_commandAllocator.Get(),
+        m_commandAllocator.get(),
         nullptr, // TODO : Initial Pipeline State?
-        IID_PPV_ARGS(&m_commandList));
+        IID_PPV_ARGS(m_commandList.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create command list.");
 
@@ -258,8 +268,8 @@ void RenderSubsystem::CreateCommandQueueAndList()
 
 void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height)
 {
-    Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
-    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    winrt::com_ptr<IDXGIFactory4> factory;
+    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DXGI Factory for swap chain.");
 
@@ -277,14 +287,16 @@ void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
     swapChainDesc.Flags = 0;
 
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain1;
-    hr = factory->CreateSwapChainForHwnd(m_commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, &swapChain1);
+    IDXGISwapChain1 *rawSwapChainPtr = nullptr;
+
+    hr = factory->CreateSwapChainForHwnd(m_commandQueue.get(), hwnd, &swapChainDesc, nullptr, nullptr, &rawSwapChainPtr);
     if (FAILED(hr))
         throw std::runtime_error("Failed to create swap chain.");
 
-    hr = swapChain1.As(&m_swapChain);
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to query IDXGISwapChain3.");
+    winrt::com_ptr<IDXGISwapChain1> swapChain1(rawSwapChainPtr, winrt::take_ownership_from_abi_t());
+    hr = swapChain1->QueryInterface(IID_PPV_ARGS(m_swapChain.put()));
+    if (FAILED(hr) || !m_swapChain)
+        throw std::runtime_error("Failed to query IDXGISwapChain3");
 }
 
 HWND RenderSubsystem::CreateMainWindow(HINSTANCE hInstance, int width, int height, LPCWSTR windowName)
@@ -326,7 +338,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     rtvHeapDesc.NumDescriptors = FrameCount; // One RTV per swap chain buffer
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    HRESULT hr = m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
+    HRESULT hr = m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(m_rtvHeap.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create RTV descriptor heap.");
 
@@ -336,7 +348,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     dsvHeapDesc.NumDescriptors = 1; // Usually one DSV
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    hr = m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap));
+    hr = m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(m_dsvHeap.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DSV descriptor heap.");
 
@@ -346,7 +358,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     cbvSrvUavHeapDesc.NumDescriptors = 64; // Adjust as needed for your resources
     cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    hr = m_device->CreateDescriptorHeap(&cbvSrvUavHeapDesc, IID_PPV_ARGS(&m_cbvSrvUavHeap));
+    hr = m_device->CreateDescriptorHeap(&cbvSrvUavHeapDesc, IID_PPV_ARGS(m_cbvSrvUavHeap.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create CBV/SRV/UAV descriptor heap.");
 
@@ -358,7 +370,7 @@ void RenderSubsystem::CreateRenderTargetViews()
 {
     for (uint32_t i = 0; i < FrameCount; ++i)
     {
-        HRESULT hr = m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i]));
+        HRESULT hr = m_swapChain->GetBuffer(i, IID_PPV_ARGS(m_renderTargets[i].put()));
         if (FAILED(hr))
             throw std::runtime_error("Failed to get swap chain buffer.");
 
@@ -366,7 +378,7 @@ void RenderSubsystem::CreateRenderTargetViews()
         rtvHandle.ptr += size_t(i) * m_rtvDescriptorSize;
 
         // Create RTV for this back buffer
-        m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
+        m_device->CreateRenderTargetView(m_renderTargets[i].get(), nullptr, rtvHandle);
     }
 }
 
@@ -405,7 +417,7 @@ void RenderSubsystem::CreateDepthStencil()
         &depthDesc,
         D3D12_RESOURCE_STATE_DEPTH_WRITE,
         &clearValue,
-        IID_PPV_ARGS(&m_depthStencil));
+        IID_PPV_ARGS(m_depthStencil.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create depth stencil resource.");
 
@@ -414,7 +426,7 @@ void RenderSubsystem::CreateDepthStencil()
     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
     dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 
-    m_device->CreateDepthStencilView(m_depthStencil.Get(), &dsvDesc, m_dsvHeapStart);
+    m_device->CreateDepthStencilView(m_depthStencil.get(), &dsvDesc, m_dsvHeapStart);
 }
 
 void RenderSubsystem::Shutdown()
@@ -423,7 +435,7 @@ void RenderSubsystem::Shutdown()
     if (m_commandQueue && m_fence)
     {
         m_fenceValue++;
-        m_commandQueue->Signal(m_fence.Get(), m_fenceValue);
+        m_commandQueue->Signal(m_fence.get(), m_fenceValue);
         if (m_fence->GetCompletedValue() < m_fenceValue)
         {
             HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -432,21 +444,7 @@ void RenderSubsystem::Shutdown()
             CloseHandle(eventHandle);
         }
     }
-    // Release resources in reverse order of creation
-    m_depthStencil.Reset();
-    for (uint32_t i = 0; i < FrameCount; ++i)
-    {
-        m_renderTargets[i].Reset();
-    }
-    m_rtvHeap.Reset();
-    m_dsvHeap.Reset();
-    m_cbvSrvUavHeap.Reset();
-    m_swapChain.Reset();
-    m_commandList.Reset();
-    m_commandAllocator.Reset();
-    m_commandQueue.Reset();
-    m_fence.Reset();
-    m_device.Reset();
+
     if (m_windowHandle)
     {
         DestroyWindow(m_windowHandle);
@@ -468,7 +466,7 @@ void RenderSubsystem::Draw()
     if (m_commandQueue && m_fence)
     {
         m_fenceValue++;
-        m_commandQueue->Signal(m_fence.Get(), m_fenceValue);
+        m_commandQueue->Signal(m_fence.get(), m_fenceValue);
         if (m_fence->GetCompletedValue() < m_fenceValue)
         {
             HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -479,7 +477,7 @@ void RenderSubsystem::Draw()
     }
 
     m_commandAllocator->Reset();
-    m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
+    m_commandList->Reset(m_commandAllocator.get(), m_pipelineState.get());
 
     // Set viewport and scissor
     D3D12_VIEWPORT viewport = {};
@@ -499,7 +497,7 @@ void RenderSubsystem::Draw()
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrier.Transition.pResource = m_renderTargets[backBufferIndex].Get();
+    barrier.Transition.pResource = m_renderTargets[backBufferIndex].get();
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -515,18 +513,18 @@ void RenderSubsystem::Draw()
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
     m_commandList->ClearDepthStencilView(m_dsvHeapStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    m_commandList->SetPipelineState(m_pipelineState.Get());
-    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    m_commandList->SetPipelineState(m_pipelineState.get());
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.get());
 
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     UpdateGlobalConstantBuffer();
-    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap.Get()};
+    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap.get()};
     m_commandList->SetDescriptorHeaps(1, heaps);
     m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart());
 
-    cube1.Draw(m_commandList.Get());
-    cube2.Draw(m_commandList.Get());
+    cube1.Draw(m_commandList.get());
+    cube2.Draw(m_commandList.get());
 
     // Transition back buffer to present
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -534,14 +532,14 @@ void RenderSubsystem::Draw()
     m_commandList->ResourceBarrier(1, &barrier);
 
     m_commandList->Close();
-    ID3D12CommandList *ppCommandLists[] = {m_commandList.Get()};
+    ID3D12CommandList *ppCommandLists[] = {m_commandList.get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
     m_swapChain->Present(1, 0);
 
     // Wait for GPU (simple sync)
     m_fenceValue++;
-    m_commandQueue->Signal(m_fence.Get(), m_fenceValue);
+    m_commandQueue->Signal(m_fence.get(), m_fenceValue);
     if (m_fence->GetCompletedValue() < m_fenceValue)
     {
         HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -568,9 +566,9 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     rootSignatureDesc.pStaticSamplers = nullptr;
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-    Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig;
-    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serializedRootSig, &errorBlob);
+    winrt::com_ptr<ID3DBlob> serializedRootSig;
+    winrt::com_ptr<ID3DBlob> errorBlob;
+    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, serializedRootSig.put(), errorBlob.put());
     if (FAILED(hr))
     {
         if (errorBlob)
@@ -578,7 +576,7 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
         throw std::runtime_error("Failed to serialize root signature.");
     }
 
-    hr = m_device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
+    hr = m_device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create root signature.");
 
@@ -614,7 +612,7 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     // PSO description
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
-    psoDesc.pRootSignature = m_rootSignature.Get();
+    psoDesc.pRootSignature = m_rootSignature.get();
     psoDesc.VS = {vsResult.bytecode->GetBufferPointer(), vsResult.bytecode->GetBufferSize()};
     psoDesc.PS = {psResult.bytecode->GetBufferPointer(), psResult.bytecode->GetBufferSize()};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -627,7 +625,7 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     psoDesc.SampleDesc.Count = 1;
 
-    hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+    hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pipelineState.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create pipeline state.");
 }

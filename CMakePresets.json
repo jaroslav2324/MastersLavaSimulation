@@ -1,0 +1,9 @@
+{
+    "version": 3,
+    "buildPresets": [
+        {
+            "name": "default",
+            "jobs": 8
+        }
+    ]
+}
