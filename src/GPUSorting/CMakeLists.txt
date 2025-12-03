@@ -1,0 +1,11 @@
+
+set(SORT_SOURCES
+	${CMAKE_CURRENT_LIST_DIR}/DeviceRadixSort.cpp
+	${CMAKE_CURRENT_LIST_DIR}/EmulatedDeadlocking.cpp
+	${CMAKE_CURRENT_LIST_DIR}/FFXParallelSort.cpp
+	${CMAKE_CURRENT_LIST_DIR}/ForwardSweep.cpp
+	${CMAKE_CURRENT_LIST_DIR}/OneSweep.cpp
+	${CMAKE_CURRENT_LIST_DIR}/pch.cpp
+)
+
+set(SORT_SOURCES "${SORT_SOURCES}" PARENT_SCOPE)

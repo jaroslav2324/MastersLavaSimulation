@@ -15,7 +15,7 @@
 class GPUSortBase
 {
 protected:
-    const char* k_sortName;
+    const char *k_sortName;
     const uint32_t k_radixPasses;
     const uint32_t k_radix;
     const uint32_t k_maxReadBack;
@@ -45,88 +45,85 @@ protected:
     winrt::com_ptr<ID3D12Resource> m_sortPayloadBuffer;
     winrt::com_ptr<ID3D12Resource> m_altBuffer;
     winrt::com_ptr<ID3D12Resource> m_altPayloadBuffer;
+    // Flags to indicate that buffers were provided by the caller and should
+    // not be (re)created or released by the sort implementation.
+    bool m_userProvidedSortBuffer = false;
+    bool m_userProvidedSortPayloadBuffer = false;
+    bool m_userProvidedAltBuffer = false;
+    bool m_userProvidedAltPayloadBuffer = false;
     winrt::com_ptr<ID3D12Resource> m_errorCountBuffer;
     winrt::com_ptr<ID3D12Resource> m_readBackBuffer;
 
-    UtilityKernels::InitSortInput* m_initSortInput;
-    UtilityKernels::ClearErrorCount* m_clearErrorCount;
-    UtilityKernels::Validate* m_validate;
+    UtilityKernels::InitSortInput *m_initSortInput;
+    UtilityKernels::ClearErrorCount *m_clearErrorCount;
+    UtilityKernels::Validate *m_validate;
 
-    //Keys only
-    //chain constructors to allow passing in manual tuning params
+    // Keys only
+    // chain constructors to allow passing in manual tuning params
     GPUSortBase(
         winrt::com_ptr<ID3D12Device> _device,
         GPUSorting::DeviceInfo _deviceInfo,
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
         uint32_t maxReadBack,
-        GPUSorting::TuningParameters tuningParams) :
-        k_sortName(sortName),
-        k_radixPasses(radixPasses),
-        k_radix(radix),
-        k_maxReadBack(maxReadBack),
-        m_devInfo(_deviceInfo),
-        k_sortingConfig({ 
-            GPUSorting::MODE_KEYS_ONLY,
-            sortingOrder,
-            keyType,
-            GPUSorting::PAYLOAD_UINT32 }),
-        k_tuningParameters(tuningParams)
-    {
-    };
+        GPUSorting::TuningParameters tuningParams) : k_sortName(sortName),
+                                                     k_radixPasses(radixPasses),
+                                                     k_radix(radix),
+                                                     k_maxReadBack(maxReadBack),
+                                                     m_devInfo(_deviceInfo),
+                                                     k_sortingConfig({GPUSorting::MODE_KEYS_ONLY,
+                                                                      sortingOrder,
+                                                                      keyType,
+                                                                      GPUSorting::PAYLOAD_UINT32}),
+                                                     k_tuningParameters(tuningParams) {
+                                                     };
 
     GPUSortBase(
         winrt::com_ptr<ID3D12Device> _device,
         GPUSorting::DeviceInfo _deviceInfo,
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
-        uint32_t maxReadBack) :
-        GPUSortBase(
-            _device,
-            _deviceInfo,
-            sortingOrder,
-            keyType,
-            sortName,
-            radixPasses,
-            radix,
-            maxReadBack,
-            Tuner::GetTuningParameters(
-                _deviceInfo,
-                GPUSorting::MODE_KEYS_ONLY))
-    {
-    };
+        uint32_t maxReadBack) : GPUSortBase(_device,
+                                            _deviceInfo,
+                                            sortingOrder,
+                                            keyType,
+                                            sortName,
+                                            radixPasses,
+                                            radix,
+                                            maxReadBack,
+                                            Tuner::GetTuningParameters(
+                                                _deviceInfo,
+                                                GPUSorting::MODE_KEYS_ONLY)) {
+                                };
 
-    //Pairs
+    // Pairs
     GPUSortBase(
         winrt::com_ptr<ID3D12Device> _device,
         GPUSorting::DeviceInfo _deviceInfo,
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
         GPUSorting::PAYLOAD_TYPE payloadType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
         uint32_t maxReadBack,
-        GPUSorting::TuningParameters tuningParams) :
-        k_sortName(sortName),
-        k_radixPasses(radixPasses),
-        k_radix(radix),
-        k_maxReadBack(maxReadBack),
-        m_devInfo(_deviceInfo),
-        k_sortingConfig({ 
-            GPUSorting::MODE_PAIRS,
-            sortingOrder,
-            keyType,
-            payloadType }),
-        k_tuningParameters(tuningParams)
-    { 
-    };
+        GPUSorting::TuningParameters tuningParams) : k_sortName(sortName),
+                                                     k_radixPasses(radixPasses),
+                                                     k_radix(radix),
+                                                     k_maxReadBack(maxReadBack),
+                                                     m_devInfo(_deviceInfo),
+                                                     k_sortingConfig({GPUSorting::MODE_PAIRS,
+                                                                      sortingOrder,
+                                                                      keyType,
+                                                                      payloadType}),
+                                                     k_tuningParameters(tuningParams) {
+                                                     };
 
     GPUSortBase(
         winrt::com_ptr<ID3D12Device> _device,
@@ -134,31 +131,85 @@ protected:
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
         GPUSorting::PAYLOAD_TYPE payloadType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
-        uint32_t maxReadBack) :
-        GPUSortBase(
-            _device,
-            _deviceInfo,
-            sortingOrder,
-            keyType,
-            payloadType,
-            sortName,
-            radixPasses,
-            radix,
-            maxReadBack,
-            Tuner::GetTuningParameters(
-                _deviceInfo,
-                GPUSorting::MODE_PAIRS))
-    {
-    };
+        uint32_t maxReadBack) : GPUSortBase(_device,
+                                            _deviceInfo,
+                                            sortingOrder,
+                                            keyType,
+                                            payloadType,
+                                            sortName,
+                                            radixPasses,
+                                            radix,
+                                            maxReadBack,
+                                            Tuner::GetTuningParameters(
+                                                _deviceInfo,
+                                                GPUSorting::MODE_PAIRS)) {
+                                };
 
-    ~GPUSortBase()
-    {
+    ~GPUSortBase() {
     };
 
 public:
+    // Allow client code to supply external buffers (keys/payloads/alternates).
+    // When these setters are used, GPUSorting will not allocate or release the
+    // corresponding buffers (until ClearUserProvidedBuffers is called).
+    void SetSortBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        m_sortBuffer = buffer;
+        m_userProvidedSortBuffer = userProvided;
+    }
+
+    void SetSortPayloadBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        m_sortPayloadBuffer = buffer;
+        m_userProvidedSortPayloadBuffer = userProvided;
+    }
+
+    void SetAltBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        m_altBuffer = buffer;
+        m_userProvidedAltBuffer = userProvided;
+    }
+
+    void SetAltPayloadBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        m_altPayloadBuffer = buffer;
+        m_userProvidedAltPayloadBuffer = userProvided;
+    }
+
+    // Convenience: set all four buffers in one call.
+    void SetAllBuffers(
+        winrt::com_ptr<ID3D12Resource> sortBuffer,
+        winrt::com_ptr<ID3D12Resource> sortPayloadBuffer,
+        winrt::com_ptr<ID3D12Resource> altBuffer,
+        winrt::com_ptr<ID3D12Resource> altPayloadBuffer,
+        bool userProvided = true)
+    {
+        SetSortBuffer(sortBuffer, userProvided);
+        SetSortPayloadBuffer(sortPayloadBuffer, userProvided);
+        SetAltBuffer(altBuffer, userProvided);
+        SetAltPayloadBuffer(altPayloadBuffer, userProvided);
+    }
+
+    // Reset the flags tracking externally-supplied buffers. Useful if the
+    // client temporarily provided specific resources and now wants the sort
+    // instance to manage them again.
+    void ClearUserProvidedBuffers()
+    {
+        m_userProvidedSortBuffer = false;
+        m_userProvidedSortPayloadBuffer = false;
+        m_userProvidedAltBuffer = false;
+        m_userProvidedAltPayloadBuffer = false;
+    }
+    // dont forget to update size
+    void Sort()
+    {
+        PrepareSortCmdList();
+        ExecuteCommandList();
+    }
+
     void TestSort(
         uint32_t testSize,
         uint32_t seed,
@@ -210,7 +261,7 @@ public:
     {
         UpdateSize(inputSize);
 
-        const float entLookup[5] = { 1.0f, .811f, .544f, .337f, .201f };
+        const float entLookup[5] = {1.0f, .811f, .544f, .337f, .201f};
         printf("Beginning ");
         printf(k_sortName);
         PrintSortingConfig(k_sortingConfig);
@@ -379,7 +430,7 @@ protected:
                 break;
             }
         }
-        
+
         if (m_devInfo.Supports16BitTypes)
         {
             m_compileArguments.push_back(L"-enable-16bit-types");
@@ -438,7 +489,7 @@ protected:
 
     void CreateTestInput(uint32_t seed)
     {
-        //Init the sorting input
+        // Init the sorting input
         m_initSortInput->Dispatch(
             m_cmdList,
             m_sortBuffer->GetGPUVirtualAddress(),
@@ -452,7 +503,7 @@ protected:
 
     void CreateTestInput(uint32_t seed, GPUSorting::ENTROPY_PRESET entropyPreset)
     {
-        //Init the sorting input
+        // Init the sorting input
         m_initSortInput->Dispatch(
             m_cmdList,
             m_sortBuffer->GetGPUVirtualAddress(),
@@ -469,7 +520,7 @@ protected:
     void ExecuteCommandList()
     {
         winrt::check_hresult(m_cmdList->Close());
-        ID3D12CommandList* commandLists[] = { m_cmdList.get() };
+        ID3D12CommandList *commandLists[] = {m_cmdList.get()};
         m_cmdQueue->ExecuteCommandLists(1, commandLists);
         winrt::check_hresult(m_cmdQueue->Signal(m_fence.get(), m_nextFenceValue));
         winrt::check_hresult(m_fence->SetEventOnCompletion(m_nextFenceValue, m_fenceEvent.get()));
@@ -544,7 +595,7 @@ protected:
         return (x + y - 1) / y;
     }
 
-    static void PrintSortingConfig(const GPUSorting::GPUSortingConfig& sortingConfig)
+    static void PrintSortingConfig(const GPUSorting::GPUSortingConfig &sortingConfig)
     {
 
         switch (sortingConfig.sortingKeyType)

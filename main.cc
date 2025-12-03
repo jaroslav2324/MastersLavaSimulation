@@ -1,10 +1,12 @@
 
-#include "inc.h"
+#include "pch.h"
 
 #include "RenderSubsystem.h"
 
-#include "src/GPUSort/GPUSorting.h"
-#include "src/GPUSort/FFXParallelSort.h"
+#include "GPUSorting/GPUSorting.h"
+#include "GPUSorting/FFXParallelSort.h"
+#include "GPUSorting/DeviceRadixSort.h"
+#include "GPUSorting/OneSweep.h"
 
 GPUSorting::DeviceInfo GetDeviceInfo(ID3D12Device *device)
 {
@@ -80,6 +82,26 @@ int main(int argc, char **argv)
 	winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 	GPUSorting::DeviceInfo deviceInfo = GetDeviceInfo(device.get());
 
+	DeviceRadixSort *drs = new DeviceRadixSort(
+		device,
+		deviceInfo,
+		GPUSorting::ORDER_ASCENDING,
+		GPUSorting::KEY_UINT32,
+		GPUSorting::PAYLOAD_UINT32);
+	drs->TestAll();
+	drs->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
+	drs->~DeviceRadixSort();
+
+	OneSweep *oneSweep = new OneSweep(
+		device,
+		deviceInfo,
+		GPUSorting::ORDER_ASCENDING,
+		GPUSorting::KEY_UINT32,
+		GPUSorting::PAYLOAD_UINT32);
+	oneSweep->TestAll();
+	oneSweep->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
+	oneSweep->~OneSweep();
+
 	FFXParallelSort *ffxPs = new FFXParallelSort(
 		device,
 		deviceInfo,
@@ -87,7 +109,7 @@ int main(int argc, char **argv)
 		GPUSorting::KEY_UINT32,
 		GPUSorting::PAYLOAD_UINT32);
 	ffxPs->TestAll();
-	ffxPs->BatchTiming(1 << 25, 100, 10, GPUSorting::ENTROPY_PRESET_1);
+	ffxPs->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
 	ffxPs->~FFXParallelSort();
 
 	MSG msg = {};

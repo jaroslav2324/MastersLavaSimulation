@@ -170,10 +170,14 @@ void DeviceRadixSort::UpdateSize(uint32_t size)
 
 void DeviceRadixSort::DisposeBuffers()
 {
-    m_sortBuffer = nullptr;
-    m_sortPayloadBuffer = nullptr;
-    m_altBuffer = nullptr;
-    m_altPayloadBuffer = nullptr;
+    if (!m_userProvidedSortBuffer)
+        m_sortBuffer = nullptr;
+    if (!m_userProvidedSortPayloadBuffer)
+        m_sortPayloadBuffer = nullptr;
+    if (!m_userProvidedAltBuffer)
+        m_altBuffer = nullptr;
+    if (!m_userProvidedAltPayloadBuffer)
+        m_altPayloadBuffer = nullptr;
     m_passHistBuffer = nullptr;
 }
 
@@ -203,14 +207,15 @@ void DeviceRadixSort::InitStaticBuffers()
 
 void DeviceRadixSort::InitBuffers(const uint32_t numKeys, const uint32_t threadBlocks)
 {
-    m_sortBuffer = CreateBuffer(
+    if (!m_userProvidedSortBuffer)
+        m_sortBuffer = CreateBuffer(
         m_device,
         numKeys * sizeof(uint32_t),
         D3D12_HEAP_TYPE_DEFAULT,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-    m_altBuffer = CreateBuffer(
+    if (!m_userProvidedAltBuffer)
+        m_altBuffer = CreateBuffer(
         m_device,
         numKeys * sizeof(uint32_t),
         D3D12_HEAP_TYPE_DEFAULT,
@@ -226,14 +231,16 @@ void DeviceRadixSort::InitBuffers(const uint32_t numKeys, const uint32_t threadB
 
     if (k_sortingConfig.sortingMode == GPUSorting::MODE_PAIRS)
     {
-        m_sortPayloadBuffer = CreateBuffer(
+        if (!m_userProvidedSortPayloadBuffer)
+            m_sortPayloadBuffer = CreateBuffer(
             m_device,
             numKeys * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,
             D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-        m_altPayloadBuffer = CreateBuffer(
+        if (!m_userProvidedAltPayloadBuffer)
+            m_altPayloadBuffer = CreateBuffer(
             m_device,
             numKeys * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,
@@ -242,14 +249,16 @@ void DeviceRadixSort::InitBuffers(const uint32_t numKeys, const uint32_t threadB
     }
     else
     {
-        m_sortPayloadBuffer = CreateBuffer(
+        if (!m_userProvidedSortPayloadBuffer)
+            m_sortPayloadBuffer = CreateBuffer(
             m_device,
             1 * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,
             D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-        m_altPayloadBuffer = CreateBuffer(
+        if (!m_userProvidedAltPayloadBuffer)
+            m_altPayloadBuffer = CreateBuffer(
             m_device,
             1 * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,

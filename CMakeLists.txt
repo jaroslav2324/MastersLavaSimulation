@@ -18,7 +18,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(WIL)
 
 add_subdirectory(src)
-add_subdirectory(src/GPUSort)
+add_subdirectory(GPUSorting)
 
 add_executable(${PROJECT_NAME} main.cc ${SRC_FILES} ${SORT_SOURCES})
 
@@ -27,7 +27,6 @@ ${CMAKE_CURRENT_LIST_DIR}/include
 ${CMAKE_CURRENT_LIST_DIR}/external/DirectX-Headers/include
 ${CMAKE_CURRENT_LIST_DIR}/external/DirectXTK12/Inc
 ${CMAKE_CURRENT_LIST_DIR}/external/wil/include
-${CMAKE_CURRENT_LIST_DIR}/src/GPUSort
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 

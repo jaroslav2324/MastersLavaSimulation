@@ -29,6 +29,39 @@ protected:
     uint32_t m_globalHistPartitions;
 
 public:
+    // Allow the caller to override internal buffers; these methods forward
+    // to GPUSortBase setters and will prevent this class from allocating
+    // or freeing these buffers if passed with userProvided=true.
+    void SetSortBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        GPUSortBase::SetSortBuffer(buffer, userProvided);
+    }
+
+    void SetSortPayloadBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        GPUSortBase::SetSortPayloadBuffer(buffer, userProvided);
+    }
+
+    void SetAltBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        GPUSortBase::SetAltBuffer(buffer, userProvided);
+    }
+
+    void SetAltPayloadBuffer(winrt::com_ptr<ID3D12Resource> buffer, bool userProvided = true)
+    {
+        GPUSortBase::SetAltPayloadBuffer(buffer, userProvided);
+    }
+
+    void SetAllBuffers(
+        winrt::com_ptr<ID3D12Resource> sortBuffer,
+        winrt::com_ptr<ID3D12Resource> sortPayloadBuffer,
+        winrt::com_ptr<ID3D12Resource> altBuffer,
+        winrt::com_ptr<ID3D12Resource> altPayloadBuffer,
+        bool userProvided = true)
+    {
+        GPUSortBase::SetAllBuffers(sortBuffer, sortPayloadBuffer, altBuffer, altPayloadBuffer, userProvided);
+    }
+
     SweepBase(
         winrt::com_ptr<ID3D12Device> _device,
         GPUSorting::DeviceInfo _deviceInfo,
@@ -168,10 +201,14 @@ protected:
 
     void DisposeBuffers() override
     {
-        m_sortBuffer = nullptr;
-        m_sortPayloadBuffer = nullptr;
-        m_altBuffer = nullptr;
-        m_altPayloadBuffer = nullptr;
+        if (!m_userProvidedSortBuffer)
+            m_sortBuffer = nullptr;
+        if (!m_userProvidedSortPayloadBuffer)
+            m_sortPayloadBuffer = nullptr;
+        if (!m_userProvidedAltBuffer)
+            m_altBuffer = nullptr;
+        if (!m_userProvidedAltPayloadBuffer)
+            m_altPayloadBuffer = nullptr;
         m_passHistBuffer = nullptr;
     }
 
@@ -208,14 +245,15 @@ protected:
 
     void InitBuffers(const uint32_t numKeys, const uint32_t threadBlocks) override
     {
-        m_sortBuffer = CreateBuffer(
+        if (!m_userProvidedSortBuffer)
+            m_sortBuffer = CreateBuffer(
             m_device,
             numKeys * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,
             D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-        m_altBuffer = CreateBuffer(
+        if (!m_userProvidedAltBuffer)
+            m_altBuffer = CreateBuffer(
             m_device,
             numKeys * sizeof(uint32_t),
             D3D12_HEAP_TYPE_DEFAULT,
@@ -231,14 +269,16 @@ protected:
 
         if (k_sortingConfig.sortingMode == GPUSorting::MODE_PAIRS)
         {
-            m_sortPayloadBuffer = CreateBuffer(
+            if (!m_userProvidedSortPayloadBuffer)
+                m_sortPayloadBuffer = CreateBuffer(
                 m_device,
                 numKeys * sizeof(uint32_t),
                 D3D12_HEAP_TYPE_DEFAULT,
                 D3D12_RESOURCE_STATE_COMMON,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-            m_altPayloadBuffer = CreateBuffer(
+            if (!m_userProvidedAltPayloadBuffer)
+                m_altPayloadBuffer = CreateBuffer(
                 m_device,
                 numKeys * sizeof(uint32_t),
                 D3D12_HEAP_TYPE_DEFAULT,
@@ -247,14 +287,16 @@ protected:
         }
         else
         {
-            m_sortPayloadBuffer = CreateBuffer(
+            if (!m_userProvidedSortPayloadBuffer)
+                m_sortPayloadBuffer = CreateBuffer(
                 m_device,
                 1 * sizeof(uint32_t),
                 D3D12_HEAP_TYPE_DEFAULT,
                 D3D12_RESOURCE_STATE_COMMON,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-            m_altPayloadBuffer = CreateBuffer(
+            if (!m_userProvidedAltPayloadBuffer)
+                m_altPayloadBuffer = CreateBuffer(
                 m_device,
                 1 * sizeof(uint32_t),
                 D3D12_HEAP_TYPE_DEFAULT,
