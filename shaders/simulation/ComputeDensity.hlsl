@@ -2,13 +2,22 @@
 
 StructuredBuffer<float3> predictedPositions : register(t0);
 
-StructuredBuffer<uint> sortedParticleHashes : register(t1);
-StructuredBuffer<uint> sortedParticleIndecies : register(t2);
-StructuredBuffer<uint> cellStart : register(t3);
-StructuredBuffer<uint> cellEnd : register(t4);
+StructuredBuffer<uint> sortedParticleIndecies : register(t1);
+StructuredBuffer<uint> cellStart : register(t2);
+StructuredBuffer<uint> cellEnd   : register(t3);
 
-RWStructuredBuffer<float> density : register(u0); // output
-RWStructuredBuffer<float> constraintC : register(u1); // optional store C = rho/rho0 - 1
+RWStructuredBuffer<float> density     : register(u0);
+RWStructuredBuffer<float> constraintC : register(u1);
+
+cbuffer GridParams : register(b1)
+{
+    int3  gridResolution;
+    float cellSize;
+    float h;
+    float h2;
+    float mass;
+    float rho0;
+};
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -16,20 +25,48 @@ void CSMain(uint gid : SV_DispatchThreadID)
     uint i = gid;
     float3 qi = predictedPositions[i];
 
-    uint cellHash = sortedParticleHashes[i];
+    int3 cell = int3(floor(qi / cellSize));
 
     float rho = 0.0;
-    uint startNeighbourIndex = cellStart[cellHash];
-    uint endNeighbourIndex = cellEnd[cellHash];
-    for (uint k=startNeighbourIndex; k < endNeighbourIndex; ++k)
+
+
+    for (int dz = -1; dz <= 1; dz++)
+    for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++)
     {
-        uint j = sortedParticleIndecies[k];
-        float3 qj = predictedPositions[j];
-        float3 r = qi - qj;
-        rho += mass * cubic_kernel_height(r); // или poly6, смотря что лучше
+        int3 ncell = cell + int3(dx,dy,dz);
+
+        if (ncell.x < 0 || ncell.y < 0 || ncell.z < 0 ||
+            ncell.x >= gridResolution.x ||
+            ncell.y >= gridResolution.y ||
+            ncell.z >= gridResolution.z)
+            continue;
+
+        // TODO: use general function
+        uint hash =
+            ncell.x +
+            ncell.y * gridResolution.x +
+            ncell.z * gridResolution.x * gridResolution.y;
+
+        uint start = cellStart[hash];
+        uint end   = cellEnd[hash];
+        //if (start == 0xFFFFFFFF) continue;
+
+        [loop]
+        for (uint idx = start; idx < end; idx++)
+        {
+            uint j = sortedParticleIndecies[idx];
+            float3 qj = predictedPositions[j];
+
+            float3 r = qi - qj;
+            float dist2 = dot(r,r);
+            if (dist2 >= h2) continue;
+
+            // TODO: constant mass 1
+            rho += mass * cubic_kernel_height(r);
+        }
     }
-    // self contribution (optional depending on kernel definition)
-    // rho += mass * cubic_kernel_height(float3(0,0,0));
+
 
     density[i] = rho;
     constraintC[i] = rho / rho0 - 1.0;

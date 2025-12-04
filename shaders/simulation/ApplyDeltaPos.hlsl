@@ -1,27 +1,34 @@
-//TODO: check
+StructuredBuffer<float3> positions : register(t0);    // x_i (old)
+RWStructuredBuffer<float3> deltaP : register(t1);     // Δp_i, will be cleared
 
-StructuredBuffer<float3> positions : register(t0); // old x
-RWStructuredBuffer<float3> predicted : register(u0); // will be updated in-place q += delta
-RWStructuredBuffer<float3> deltaP : register(u1);
-RWStructuredBuffer<float3> velocities : register(u2); // to update
+RWStructuredBuffer<float3> predicted : register(u0);  // q_i*
+RWStructuredBuffer<float3> velocities : register(u1); // updated v_i
+RWStructuredBuffer<float3> newPositions : register(u2); 
 
 cbuffer SimParams2 : register(b1)
 {
     float dt;
-    float damping; // optional
+    float velocityDamping; // e.g. = 0.99 or 1.0
 }
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
     uint i = gid;
-    float3 q = predicted[i];
+
+    float3 q  = predicted[i];
     float3 dp = deltaP[i];
     float3 qnew = q + dp;
-    predicted[i] = qnew;
 
-    // update velocity: v = (qnew - x) / dt
-    float3 x = positions[i];
-    float3 v = (qnew - x) / dt;
-    velocities[i] = v * (1.0 - damping); // optional damping
+    float3 xold = positions[i];
+
+    float3 v = (qnew - xold) / dt;
+    v *= velocityDamping;
+
+    newPositions[i] = qnew;
+    velocities[i] = v;
+
+    deltaP[i] = float3(0,0,0);
+
+    predicted[i] = qnew;
 }

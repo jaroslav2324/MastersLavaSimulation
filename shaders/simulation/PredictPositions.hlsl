@@ -1,9 +1,3 @@
-// PredictPositions.hlsl
-// PBF Step: apply external forces + predict positions
-
-// ---------------------------------
-// CONSTANTS
-// ---------------------------------
 cbuffer SimParams : register(b0)
 {
     uint  particleCount;
@@ -11,34 +5,27 @@ cbuffer SimParams : register(b0)
     float3 externalForce; // gravity (0, -9.81, 0)
 };
 
-// ---------------------------------
-// RESOURCES
-// ---------------------------------
-StructuredBuffer<float4> gPositionsSrc     : register(t0); // (x, y, z, radius or padding)
-StructuredBuffer<float4> gVelocitySrc      : register(t1); // (vx, vy, vz, pad)
+StructuredBuffer<float3> gPositionsSrc     : register(t0); // (x, y, z, radius or padding)
+StructuredBuffer<float3> gVelocitySrc      : register(t1); // (vx, vy, vz, pad)
 
-RWStructuredBuffer<float4> gPredictedPositionsDst : register(u0);
-RWStructuredBuffer<float4> gVelocityDst           : register(u1);
+RWStructuredBuffer<float3> gPredictedPositionsDst : register(u0);
+RWStructuredBuffer<float3> gVelocityDst           : register(u1);
 
-// ---------------------------------
-// THREADS PER GROUP
-// ---------------------------------
 [numthreads(256, 1, 1)]
 void CSMain(uint3 tid : SV_DispatchThreadID)
 {
-    uint idx = tid.x;
+    uint idx = tid.x; // TODO: точно правильный индекс?
     if (idx >= particleCount) return;
 
-    float4 pos = gPositionsSrc[idx];
-    float4 vel = gVelocitySrc[idx];
+    float3 pos = gPositionsSrc[idx];
+    float3 vel = gVelocitySrc[idx];
 
     // Apply external forces
-    vel.xyz = vel.xyz + externalForce * dt;
+    vel.xyz = vel + externalForce * dt;
 
     // Predict new position
-    float3 posPred = pos.xyz + vel.xyz * dt;
+    float3 posPred = pos + vel * dt;
 
-    // Write results
-    gVelocityDst[idx]           = float4(vel.xyz, 0.0f);
-    gPredictedPositionsDst[idx] = float4(posPred, pos.w);
+    gVelocityDst[idx] = vel;
+    gPredictedPositionsDst[idx] = posPred;
 }

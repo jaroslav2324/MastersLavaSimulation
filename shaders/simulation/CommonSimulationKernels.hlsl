@@ -1,11 +1,11 @@
-// common_kernels.hlsl
+
+// TODO: change buffer
 cbuffer SimParams : register(b0)
 {
     float h;
     float rho0;
     float mass;
     float eps;      // small epsilon for denom
-    uint  MAX_NEIGHBORS;
     float dt;
 };
 

@@ -4,7 +4,7 @@
 
 namespace SimulationKernels
 {
-    // Root signature parameter indices for SpatialHash
+    // Root signature parameter indices for Hash
     enum class SpatialHashReg
     {
         Params = 0,
@@ -14,17 +14,16 @@ namespace SimulationKernels
     };
 
     /**
-     * @brief Spatial Hash Kernel
-     * Computes spatial hash for each particle position and outputs hash/index pairs.
-     * Uses infinite grid hash function: h = (cell.x*p1) XOR (cell.y*p2) XOR (cell.z*p3)
+     * @brief Hash Kernel
+     * Computes cell hash for each particle position and outputs hash/index pairs.
      *
      * Input: particle positions (world space)
      * Output: hash values, particle indices
      */
-    class SpatialHash : public ComputeKernelBase
+    class CellHash : public ComputeKernelBase
     {
     public:
-        SpatialHash(
+        CellHash(
             winrt::com_ptr<ID3D12Device> device,
             const GPUSorting::DeviceInfo &info,
             const std::vector<std::wstring> &compileArguments,
@@ -51,7 +50,7 @@ namespace SimulationKernels
         void Dispatch(
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t numParticles,
-            const DirectX::XMFLOAT3 &worldMin,
+            const DirectX::XMFLOAT3 &worldMin, // TODO: use simple math
             float cellSize,
             uint32_t hashTableMask,
             const D3D12_GPU_VIRTUAL_ADDRESS &positionBuffer,
@@ -60,7 +59,7 @@ namespace SimulationKernels
         {
             // Constant buffer: [worldMin(f32x3), cellSize(f32), numParticles(u32), hashTableMask(u32)]
             std::array<uint32_t, 6> constants;
-            memcpy(constants.data(), &worldMin.x, sizeof(DirectX::XMFLOAT3));
+            memcpy(constants.data(), &worldMin.x, sizeof(DirectX::XMFLOAT3)); // TODO: use simple math
             memcpy(reinterpret_cast<float *>(constants.data()) + 3, &cellSize, sizeof(float));
             constants[4] = numParticles;
             constants[5] = hashTableMask;

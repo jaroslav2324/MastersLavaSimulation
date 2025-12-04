@@ -51,7 +51,7 @@ namespace SimulationKernels
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t particleCount,
             float dt,
-            const DirectX::XMFLOAT3 &externalForce,
+            const DirectX::XMFLOAT3 &externalForce, // TODO: use simple math
             const D3D12_GPU_VIRTUAL_ADDRESS &positionsSrc,
             const D3D12_GPU_VIRTUAL_ADDRESS &velocitySrc,
             const D3D12_GPU_VIRTUAL_ADDRESS &predictedPositionsDst,
