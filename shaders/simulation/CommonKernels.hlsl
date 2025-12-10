@@ -1,13 +1,32 @@
 
-// TODO: change buffer
-cbuffer SimParams : register(b0)
+#include "CommonData.hlsl"
+
+uint3 GetCellCoord(float3 p)
 {
-    float h;
-    float rho0;
-    float mass;
-    float eps;      // small epsilon for denom
-    float dt;
-};
+    return uint3(
+        clamp((uint)floor((p.x - worldOrigin.x) / cellSize), 0, gridResolution.x - 1),
+        clamp((uint)floor((p.y - worldOrigin.y) / cellSize), 0, gridResolution.y - 1),
+        clamp((uint)floor((p.z - worldOrigin.z) / cellSize), 0, gridResolution.z - 1)
+    );
+}
+
+uint GetCellHash(uint3 c)
+{
+    return c.x 
+         + c.y * gridResolution.x
+         + c.z * gridResolution.x * gridResolution.y;
+}
+
+const float kTemperatureSolid = 900;
+const float kTemperatureLiquid = 1200;
+const float kConductivitySolid = 2.0;
+const float kConductivityLiquid = 2.5;
+
+float GetThermalConductivity(float T)
+{
+    float a = saturate((T - kTemperatureSolid) / (kTemperatureLiquid - kTemperatureSolid));
+    return lerp(kConductivitySolid, kConductivityLiquid, a);
+}
 
 static const float PI = 3.14159265359;
 

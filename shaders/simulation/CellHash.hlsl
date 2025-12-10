@@ -1,11 +1,4 @@
-
-cbuffer SimParams : register(b0)
-{
-    float3 worldMin;
-    float  cellSize;
-    uint3  gridResolution; 
-    uint   numParticles;
-};
+#include "CommonData.hlsl"
 
 StructuredBuffer<float3> positionBuffer : register(t0);
 
@@ -20,7 +13,7 @@ void CS_HashParticles(uint id : SV_DispatchThreadID)
     float3 pos = positionBuffer[id];
 
     // Convert world position to grid cell coordinates
-    int3 cell = int3(floor((pos - worldMin) / cellSize));
+    int3 cell = int3(floor((pos - worldOrigin) / cellSize));
 
     // Clamp to grid to avoid out-of-range access
     cell = clamp(cell, int3(0,0,0), int3(gridResolution) - 1);

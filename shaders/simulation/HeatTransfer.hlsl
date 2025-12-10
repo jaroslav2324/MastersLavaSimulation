@@ -1,0 +1,85 @@
+#include "CommonKernels.hlsl"
+
+StructuredBuffer<float3> predictedPositions     : register(t0);
+StructuredBuffer<uint>   sortedParticleIndices  : register(t1);
+StructuredBuffer<uint>   cellStart              : register(t2);
+StructuredBuffer<uint>   cellEnd                : register(t3);
+
+StructuredBuffer<float> temperature             : register(t4);   // T_i
+StructuredBuffer<float> density                 : register(t5);   // ρ_i
+
+RWStructuredBuffer<float> temperatureOut        : register(u0);
+
+[numthreads(256,1,1)]
+void CSMain(uint gid : SV_DispatchThreadID)
+{
+    uint i = gid;
+
+    // Read particle data
+    float3 pi = predictedPositions[i];
+    float Ti  = temperature[i];
+    float rhoi = density[i];
+    float ki = GetThermalConductivity(Ti);
+
+    float laplacian = 0.0;
+
+    uint3 cell = GetCellCoord(pi);
+
+    // Search neighbors (27 cells)
+    for (int dz = -1; dz <= 1; dz++)
+    for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++)
+    {
+        int3 nc = int3(cell) + int3(dx, dy, dz);
+
+        if (nc.x < 0 || nc.y < 0 || nc.z < 0) continue;
+        if (nc.x >= gridResolution.x || nc.y >= gridResolution.y || nc.z >= gridResolution.z) continue;
+
+        uint hash = GetCellHash(uint3(nc));
+
+        uint start = cellStart[hash];
+        uint end   = cellEnd[hash];
+
+        [loop]
+        for (uint idx = start; idx < end; idx++)
+        {
+            uint j = sortedParticleIndices[idx];
+            if (j == i) continue;
+
+            float3 pj = predictedPositions[j];
+            float3 rij = pi - pj;
+            float r2 = dot(rij, rij);
+            if (r2 >= h2) continue;
+
+            float Tj = temperature[j];
+            float rhoj = density[j];
+            float kj = GetThermalConductivity(Tj);
+            float mj = massBuffer[j];
+
+            // kernel gradient
+            float3 gradW = cubic_kernel_gradient(rij);
+
+            // numerator: r_ij · ∇W_ij
+            float dotTerm = dot(rij, gradW);
+
+            // denominator: r^2 + 0.01 h^2
+            float denom = r2 + epsHeatTransfer;
+
+            // term = (m_j / rho_j) * (k_j*T_j - k_i*T_i) * dotTerm / denom
+            float diffTerm = (kj * Tj) - (ki * Ti);
+
+            laplacian += (mj / rhoj) * diffTerm * (dotTerm / denom);
+        }
+    }
+
+    // Multiply by the leading factor 2 from the formula
+    laplacian *= 2.0;
+
+    // Heat equation: dT/dt = k_i * laplacian
+    float dT = ki * laplacian;
+
+    // Update temperature
+    float newT = Ti + dt * dT;
+
+    temperatureOut[i] = newT;
+}

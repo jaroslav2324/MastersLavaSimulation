@@ -1,15 +1,11 @@
+#include "CommonData.hlsl"
+
 StructuredBuffer<float3> positions : register(t0);    // x_i (old)
 RWStructuredBuffer<float3> deltaP : register(t1);     // Δp_i, will be cleared
 
 RWStructuredBuffer<float3> predicted : register(u0);  // q_i*
 RWStructuredBuffer<float3> velocities : register(u1); // updated v_i
 RWStructuredBuffer<float3> newPositions : register(u2); 
-
-cbuffer SimParams2 : register(b1)
-{
-    float dt;
-    float velocityDamping; // e.g. = 0.99 or 1.0
-}
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)

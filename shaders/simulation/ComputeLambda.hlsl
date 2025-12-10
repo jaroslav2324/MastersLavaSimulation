@@ -1,4 +1,4 @@
-#include "common_kernels.hlsl"
+#include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t0);
 StructuredBuffer<uint> sortedParticleIndecies : register(t1);
@@ -9,32 +9,6 @@ StructuredBuffer<float> density : register(t4);
 StructuredBuffer<float> constraintC : register(t5);
 
 RWStructuredBuffer<float> lambda : register(u0);
-
-cbuffer GridParams : register(b1)
-{
-    uint3 gridResolution;
-    float   cellSize; 
-    float3 worldOrigin;   
-    float h2; // kernel support radius squared      
-};
-
-// TODO: move to common
-uint3 GetCellCoord(float3 p)
-{
-    return uint3(
-        clamp((uint)floor((p.x - worldOrigin.x) / cellSize), 0, gridResolution.x - 1),
-        clamp((uint)floor((p.y - worldOrigin.y) / cellSize), 0, gridResolution.y - 1),
-        clamp((uint)floor((p.z - worldOrigin.z) / cellSize), 0, gridResolution.z - 1)
-    );
-}
-
-// TODO: move to common
-uint GetCellHash(uint3 c)
-{
-    return c.x 
-         + c.y * gridResolution.x
-         + c.z * gridResolution.x * gridResolution.y;
-}
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -79,7 +53,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
             float3 gradW = cubic_kernel_gradient(rij);
 
-            // TODO: считаем что масса 1, завести константу
             float3 grad_j = - (mass / rho0) * gradW;
             sumGrad2 += dot(grad_j, grad_j);
 

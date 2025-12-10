@@ -1,4 +1,4 @@
-#include "CommonSimulationKernels.hlsl"
+#include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t0);
 
@@ -8,16 +8,6 @@ StructuredBuffer<uint> cellEnd   : register(t3);
 
 RWStructuredBuffer<float> density     : register(u0);
 RWStructuredBuffer<float> constraintC : register(u1);
-
-cbuffer GridParams : register(b1)
-{
-    int3  gridResolution;
-    float cellSize;
-    float h;
-    float h2;
-    float mass;
-    float rho0;
-};
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -42,11 +32,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             ncell.z >= gridResolution.z)
             continue;
 
-        // TODO: use general function
-        uint hash =
-            ncell.x +
-            ncell.y * gridResolution.x +
-            ncell.z * gridResolution.x * gridResolution.y;
+        uint hash = GetCellHash(ncell);
 
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
@@ -62,7 +48,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float dist2 = dot(r,r);
             if (dist2 >= h2) continue;
 
-            // TODO: constant mass 1
             rho += mass * cubic_kernel_height(r);
         }
     }

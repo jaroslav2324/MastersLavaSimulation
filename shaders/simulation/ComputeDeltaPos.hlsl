@@ -1,4 +1,4 @@
-#include "common_kernels.hlsl"
+#include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted : register(t0);
 StructuredBuffer<uint>   sortedParticleIndices : register(t1);
@@ -9,14 +9,6 @@ StructuredBuffer<float> lambda : register(t4);
 
 RWStructuredBuffer<float3> deltaP : register(u0);
 
-cbuffer GridParams : register(b1)
-{
-    int3 gridResolution;  
-    float cellSize;       
-    float h;              // kernel radius
-    float h2;             
-    float rho0;           // rest density
-};
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -42,11 +34,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             ncell.z >= gridResolution.z)
             continue;
 
-        // TODO: use general function
-        uint hash = 
-            ncell.x +
-            ncell.y * gridResolution.x +
-            ncell.z * gridResolution.x * gridResolution.y;
+        uint hash = GetCellHash(ncell);
 
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];

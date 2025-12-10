@@ -1,20 +1,16 @@
+#include "CommonData.hlsl"
+
 StructuredBuffer<uint> hashes : register(t0);
 
 // размер буферов - количество клеток в кубе
 RWStructuredBuffer<int> cellStart : register(u0);
 RWStructuredBuffer<int> cellEnd   : register(u1);
 
-cbuffer Params : register(b0)
-{
-    uint NumParticles;
-    uint NumCells;
-};
-
 [numthreads(256, 1, 1)]
 void CS_FindCellRanges(uint3 DTid : SV_DispatchThreadID)
 {
     uint i = DTid.x;
-    if (i >= NumParticles)
+    if (i >= numParticles)
         return;
 
     uint h = hashes[i];
@@ -33,8 +29,8 @@ void CS_FindCellRanges(uint3 DTid : SV_DispatchThreadID)
     }
 
     // Последний элемент массива закрывает свою группу
-    if (i == NumParticles - 1)
+    if (i == numParticles - 1)
     {
-        cellEnd[h] = NumParticles;
+        cellEnd[h] = numParticles;
     }
 }
