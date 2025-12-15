@@ -5,10 +5,10 @@ StructuredBuffer<uint> sortedParticleIndecies : register(t1);
 StructuredBuffer<uint> cellStart : register(t2);
 StructuredBuffer<uint> cellEnd   : register(t3);
 
-StructuredBuffer<float> density : register(t4);
-StructuredBuffer<float> constraintC : register(t5);
+StructuredBuffer<float> density : register(t8);
+StructuredBuffer<float> constraintC : register(t9);
 
-RWStructuredBuffer<float> lambda : register(u0);
+RWStructuredBuffer<float> lambda : register(u10);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)

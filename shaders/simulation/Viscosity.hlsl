@@ -1,24 +1,11 @@
-// ComputeViscosityCS.hlsl
+
 // Computes mu_i from log(log(mu+gamma)) = q - y*log(T)
 // mu = exp( A * T^{-y} ) - gamma,  A = exp(q)
 
-StructuredBuffer<float> temperatureIn   : register(t0); // T_i
+StructuredBuffer<float> temperatureIn   : register(t7); // T_i
 
-RWStructuredBuffer<float> muOut        : register(u0); // μ_i result
-RWStructuredBuffer<float> viscCoeffOut : register(u1); // optional normalized coeff 0..1
-
-// cbuffer ViscosityParams : register(b0)
-// {
-//     float ;         // parameter from formula
-//     float ;         // exponent in formula
-//     float gamma;     // γ offset
-//     float Tmin;      // clamp for temperature (e.g. 1e-3)
-//     float expClampMin; // e.g. -80.0
-//     float expClampMax; // e.g.  80.0
-//     float muMin;     // minimum mu after clamp
-//     float muMax;     // maximum mu after clamp
-//     float muNormMax; // value of mu that maps to viscCoeff=1 (for normalization)
-// };
+RWStructuredBuffer<float> muOut        : register(u7); // μ_i result
+RWStructuredBuffer<float> viscCoeffOut : register(u13); // optional normalized coeff 0..1
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)

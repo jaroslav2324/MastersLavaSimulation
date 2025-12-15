@@ -1,14 +1,14 @@
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predictedPositions     : register(t0);
-StructuredBuffer<uint>   sortedParticleIndices  : register(t1);
-StructuredBuffer<uint>   cellStart              : register(t2);
-StructuredBuffer<uint>   cellEnd                : register(t3);
+StructuredBuffer<float3> predictedPositions     : register(t1);
+StructuredBuffer<uint>   sortedParticleIndices  : register(t4);
+StructuredBuffer<uint>   cellStart              : register(t5);
+StructuredBuffer<uint>   cellEnd                : register(t6);
 
-StructuredBuffer<float> temperature             : register(t4);   // T_i
-StructuredBuffer<float> density                 : register(t5);   // ρ_i
+StructuredBuffer<float> temperature             : register(t7);   // T_i
+StructuredBuffer<float> density                 : register(t8);   // ρ_i
 
-RWStructuredBuffer<float> temperatureOut        : register(u0);
+RWStructuredBuffer<float> temperatureOut        : register(u6);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)

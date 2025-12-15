@@ -1,13 +1,13 @@
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predicted : register(t0);
-StructuredBuffer<uint>   sortedParticleIndices : register(t1);
-StructuredBuffer<uint>   cellStart : register(t2);
-StructuredBuffer<uint>   cellEnd   : register(t3);
+StructuredBuffer<float3> predicted : register(t1);
+StructuredBuffer<uint>   sortedParticleIndices : register(t4);
+StructuredBuffer<uint>   cellStart : register(t5);
+StructuredBuffer<uint>   cellEnd   : register(t6);
 
-StructuredBuffer<float> lambda : register(t4);
+StructuredBuffer<float> lambda : register(t10);
 
-RWStructuredBuffer<float3> deltaP : register(u0);
+RWStructuredBuffer<float3> deltaP : register(u2);
 
 
 [numthreads(256,1,1)]

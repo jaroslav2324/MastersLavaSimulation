@@ -22,6 +22,8 @@
 
 #include <SimpleMath.h>
 
+using Vector3 = DirectX::SimpleMath::Vector3;
+
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")

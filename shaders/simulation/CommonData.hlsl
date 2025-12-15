@@ -1,4 +1,38 @@
 
+// ---------- SRV ----------
+// t0  Positions
+// t1  Predicted Positions (read-only alias)
+// t2  Velocities (read-only alias)
+
+// t3  ParticleHash
+// t4  SortedIndices
+// t5  CellStart
+// t6  CellEnd
+
+// t7  Temperature
+// t8  Density
+// t9  ConstraintC
+// t10 Lambda
+// t11 ViscosityCoeff
+
+// ---------- UAV ----------
+// u0  PredictedRW
+// u1  VelocitiesRW
+// u2  DeltaP
+// u3  DensityRW
+// u4  ConstraintCRW
+// u5  LambdaRW
+// u6  TemperatureRW
+// u7  ViscosityMu
+// u8  HashRW
+// u9  IndexRW
+// u10 CellStartRW
+// u11 CellEndRW
+// u12 NewPositionsRW
+// u13 ViscosityCoeffRW
+
+// ---------- CB ----------
+// b0  SimParams
 
 cbuffer SimParams : register(b0)
 {
@@ -30,5 +64,4 @@ cbuffer SimParams : register(b0)
     float muMinViscosity;     // minimum mu after clamp
     float muMaxViscosity;     // maximum mu after clamp
     float muNormMaxViscosity; // value of mu that maps to viscCoeff=1 (for normalization)
-
 };

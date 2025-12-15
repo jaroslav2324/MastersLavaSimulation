@@ -5,13 +5,14 @@
 namespace SimulationKernels
 {
     // Root signature parameter indices for PredictPositions
+    // Matches registers in shaders/PredictPositions.hlsl
     enum class PredictPositionsReg
     {
-        Params = 0,
-        PositionsSrc = 1,
-        VelocitySrc = 2,
-        PredictedPositionsDst = 3,
-        VelocityDst = 4,
+        Params = 0,                // b0
+        PositionsSrc = 0,          // t0
+        VelocitySrc = 2,           // t2
+        PredictedPositionsDst = 0, // u0
+        VelocityDst = 1            // u1
     };
 
     /**
@@ -51,28 +52,19 @@ namespace SimulationKernels
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t particleCount,
             float dt,
-            const DirectX::XMFLOAT3 &externalForce, // TODO: use simple math
+            const Vector3 &externalForce,
             const D3D12_GPU_VIRTUAL_ADDRESS &positionsSrc,
             const D3D12_GPU_VIRTUAL_ADDRESS &velocitySrc,
             const D3D12_GPU_VIRTUAL_ADDRESS &predictedPositionsDst,
             const D3D12_GPU_VIRTUAL_ADDRESS &velocityDst)
         {
-            // Constant buffer: [particleCount(u32), dt(f32), externalForce(f32x3)]
-            std::array<float, 5> constants = {
-                static_cast<float>(particleCount),
-                dt,
-                externalForce.x,
-                externalForce.y,
-                externalForce.z};
-
             SetPipelineState(cmdList);
-            cmdList->SetComputeRoot32BitConstants(0, (uint32_t)constants.size(), constants.data(), 0);
+            // Caller must bind SimParams CBV at root 0 via SetComputeRootConstantBufferView
             cmdList->SetComputeRootShaderResourceView(1, positionsSrc);
             cmdList->SetComputeRootShaderResourceView(2, velocitySrc);
             cmdList->SetComputeRootUnorderedAccessView(3, predictedPositionsDst);
             cmdList->SetComputeRootUnorderedAccessView(4, velocityDst);
 
-            // Dispatch in groups of 256 threads
             uint32_t threadGroups = (particleCount + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
         }
@@ -81,7 +73,7 @@ namespace SimulationKernels
         const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
         {
             auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(5);
-            rootParams[0].InitAsConstants(5, 0); // [particleCount, dt, fx, fy, fz]
+            rootParams[0].InitAsConstantBufferView(0); // SimParams (b0)
             rootParams[1].InitAsShaderResourceView((UINT)PredictPositionsReg::PositionsSrc);
             rootParams[2].InitAsShaderResourceView((UINT)PredictPositionsReg::VelocitySrc);
             rootParams[3].InitAsUnorderedAccessView((UINT)PredictPositionsReg::PredictedPositionsDst);

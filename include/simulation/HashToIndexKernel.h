@@ -5,11 +5,13 @@
 namespace SimulationKernels
 {
     // Root signature parameter indices for HashToIndex
+    // Matches registers in shaders/HashToIndex.hlsl
     enum class HashToIndexReg
     {
-        Params = 0,
-        Hashes = 1,
-        CellStart = 2,
+        Params = 0,     // b0
+        Hashes = 3,     // t3
+        CellStart = 10, // u10
+        CellEnd = 11    // u11
     };
 
     /**
@@ -31,7 +33,7 @@ namespace SimulationKernels
             const std::filesystem::path &shaderPath) : ComputeKernelBase(device,
                                                                          info,
                                                                          shaderPath,
-                                                                         L"CS_FindCellStart",
+                                                                         L"CS_FindCellRanges",
                                                                          compileArguments,
                                                                          CreateRootParameters())
         {
@@ -52,17 +54,15 @@ namespace SimulationKernels
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t numParticles,
             const D3D12_GPU_VIRTUAL_ADDRESS &hashes,
-            const D3D12_GPU_VIRTUAL_ADDRESS &cellStart)
+            const D3D12_GPU_VIRTUAL_ADDRESS &cellStart,
+            const D3D12_GPU_VIRTUAL_ADDRESS &cellEnd)
         {
-            // Constant buffer: [numParticles(u32)]
-            std::array<uint32_t, 1> constants = {numParticles};
-
             SetPipelineState(cmdList);
-            cmdList->SetComputeRoot32BitConstants(0, (uint32_t)constants.size(), constants.data(), 0);
+            // Caller should bind SimParams CBV at root 0 via SetComputeRootConstantBufferView
             cmdList->SetComputeRootShaderResourceView(1, hashes);
             cmdList->SetComputeRootUnorderedAccessView(2, cellStart);
+            cmdList->SetComputeRootUnorderedAccessView(3, cellEnd);
 
-            // Dispatch in groups of 256 threads
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
         }
@@ -70,10 +70,11 @@ namespace SimulationKernels
     protected:
         const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
         {
-            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(3);
-            rootParams[0].InitAsConstants(1, 0); // [numParticles]
+            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(4);
+            rootParams[0].InitAsConstantBufferView(0); // SimParams (b0)
             rootParams[1].InitAsShaderResourceView((UINT)HashToIndexReg::Hashes);
             rootParams[2].InitAsUnorderedAccessView((UINT)HashToIndexReg::CellStart);
+            rootParams[3].InitAsUnorderedAccessView((UINT)HashToIndexReg::CellEnd);
             return rootParams;
         }
     };

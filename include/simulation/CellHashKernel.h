@@ -50,7 +50,7 @@ namespace SimulationKernels
         void Dispatch(
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t numParticles,
-            const DirectX::XMFLOAT3 &worldMin, // TODO: use simple math
+            const Vector3 &worldMin,
             float cellSize,
             uint32_t hashTableMask,
             const D3D12_GPU_VIRTUAL_ADDRESS &positionBuffer,
@@ -59,7 +59,7 @@ namespace SimulationKernels
         {
             // Constant buffer: [worldMin(f32x3), cellSize(f32), numParticles(u32), hashTableMask(u32)]
             std::array<uint32_t, 6> constants;
-            memcpy(constants.data(), &worldMin.x, sizeof(DirectX::XMFLOAT3)); // TODO: use simple math
+            memcpy(constants.data(), &worldMin.x, sizeof(Vector3));
             memcpy(reinterpret_cast<float *>(constants.data()) + 3, &cellSize, sizeof(float));
             constants[4] = numParticles;
             constants[5] = hashTableMask;
