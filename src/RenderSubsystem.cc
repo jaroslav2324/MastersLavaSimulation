@@ -1,4 +1,4 @@
-#include "RenderSubsystem.h"
+#include "framework/RenderSubsystem.h"
 
 #include <chrono>
 #include <stdexcept>
@@ -6,9 +6,9 @@
 
 #include <SimpleMath.h>
 
-#include "ShaderCompiler.h"
+#include "framework/ShaderCompiler.h"
 
-#include "RenderTemplatesAPI.h"
+#include "framework/RenderTemplatesAPI.h"
 
 RenderSubsystem *RenderSubsystem::s_instance = nullptr;
 
@@ -332,7 +332,7 @@ HWND RenderSubsystem::CreateMainWindow(HINSTANCE hInstance, int width, int heigh
 
 void RenderSubsystem::CreateDescriptorHeaps()
 {
-    // TODO: replace with helper function
+    // TODO: replace with Allocator
     // RTV Heap
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
     rtvHeapDesc.NumDescriptors = FrameCount; // One RTV per swap chain buffer
@@ -342,8 +342,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create RTV descriptor heap.");
 
-    // TODO: replace with helper function
-    // DSV Heap
+    // TODO: replace with Allocator
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
     dsvHeapDesc.NumDescriptors = 1; // Usually one DSV
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
@@ -352,15 +351,7 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DSV descriptor heap.");
 
-    // TODO: replace with helper function
-    // CBV/SRV/UAV Heap (shader-visible)
-    D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
-    cbvSrvUavHeapDesc.NumDescriptors = 64; // Adjust as needed for your resources
-    cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    hr = m_device->CreateDescriptorHeap(&cbvSrvUavHeapDesc, IID_PPV_ARGS(m_cbvSrvUavHeap.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create CBV/SRV/UAV descriptor heap.");
+    m_cbvSrvUavAllocator = winrt::make_self<DescriptorAllocator>(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, true);
 
     m_rtvHeapStart = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     m_dsvHeapStart = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();

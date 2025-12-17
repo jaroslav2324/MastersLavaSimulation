@@ -1,28 +1,20 @@
-/******************************************************************************
- * GPUSorting
- *
- * SPDX-License-Identifier: MIT
- * Copyright Thomas Smith 2/13/2024
- * https://github.com/b0nes164/GPUSorting
- *
- ******************************************************************************/
 #pragma once
 #include "pch.h"
-#include "GPUsorting.h"
+#include "GPUsorting/GPUsorting.h"
 
-class ComputeKernelBase
+class SimulationComputeKernelBase
 {
     winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
     winrt::com_ptr<ID3D12PipelineState> m_computePipelineStateDesc;
 
 public:
-    ComputeKernelBase(
+    SimulationComputeKernelBase(
         winrt::com_ptr<ID3D12Device> device,
         const GPUSorting::DeviceInfo &info,
         const std::filesystem::path &shaderPath,
         const wchar_t *entryPoint,
         const std::vector<std::wstring> &compileArguments,
-        const std::vector<CD3DX12_ROOT_PARAMETER1> &rootParams)
+        winrt::com_ptr<ID3D12RootSignature> rootSignature)
     {
         auto byteCode = CompileShader(
             shaderPath,
@@ -30,9 +22,7 @@ public:
             entryPoint,
             compileArguments);
 
-        CreateRootSignature(
-            device,
-            rootParams);
+        m_rootSignature = rootSignature;
 
         CreatePipelineStateDesc(
             device,
@@ -43,10 +33,6 @@ protected:
     const uint32_t k_isNotPartialBitFlag = 0;
     const uint32_t k_isPartialBitFlag = 1;
     const uint32_t k_maxDim = 65535;
-
-    // Slightly scuffed, as we cannot forward declare and call the function
-    // in the base constructor without breaking things
-    virtual const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() = 0;
 
     void SetPipelineState(winrt::com_ptr<ID3D12GraphicsCommandList> cmdList)
     {
@@ -136,29 +122,6 @@ private:
                computeShader->GetBufferSize());
 
         return byteCode;
-    }
-
-    void CreateRootSignature(
-        winrt::com_ptr<ID3D12Device> device,
-        const std::vector<CD3DX12_ROOT_PARAMETER1> &rootParams)
-    {
-        CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC computeRootSignatureDesc;
-        computeRootSignatureDesc.Init_1_1(
-            static_cast<uint32_t>(rootParams.size()),
-            rootParams.data(), 0, nullptr);
-
-        winrt::com_ptr<ID3DBlob> signature;
-        winrt::check_hresult(D3DX12SerializeVersionedRootSignature(
-            &computeRootSignatureDesc,
-            D3D_ROOT_SIGNATURE_VERSION_1_1,
-            signature.put(),
-            nullptr));
-
-        winrt::check_hresult(device->CreateRootSignature(
-            0,
-            signature->GetBufferPointer(),
-            signature->GetBufferSize(),
-            IID_PPV_ARGS(m_rootSignature.put())));
     }
 
     void CreatePipelineStateDesc(

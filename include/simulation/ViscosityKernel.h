@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "GPUSorting/ComputeKernelBase.h"
+#include "SimulationComputeKernelBase.h"
 
 namespace SimulationKernels
 {
@@ -12,19 +12,20 @@ namespace SimulationKernels
         ViscCoeffOut = 13 // u13
     };
 
-    class Viscosity : public ComputeKernelBase
+    class Viscosity : public SimulationComputeKernelBase
     {
     public:
         Viscosity(
             winrt::com_ptr<ID3D12Device> device,
             const GPUSorting::DeviceInfo &info,
             const std::vector<std::wstring> &compileArguments,
-            const std::filesystem::path &shaderPath) : ComputeKernelBase(device,
-                                                                         info,
-                                                                         shaderPath,
-                                                                         L"CSMain",
-                                                                         compileArguments,
-                                                                         CreateRootParameters())
+            const std::filesystem::path &shaderPath,
+            winrt::com_ptr<ID3D12RootSignature> rootSignature) : SimulationComputeKernelBase(device,
+                                                                                             info,
+                                                                                             shaderPath,
+                                                                                             L"CSMain",
+                                                                                             compileArguments,
+                                                                                             rootSignature)
         {
         }
 
@@ -42,17 +43,6 @@ namespace SimulationKernels
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
-        }
-
-    protected:
-        const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
-        {
-            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(4);
-            rootParams[0].InitAsConstantBufferView(0);
-            rootParams[1].InitAsShaderResourceView((UINT)ViscosityReg::Temperature);
-            rootParams[2].InitAsUnorderedAccessView((UINT)ViscosityReg::MuOut);
-            rootParams[3].InitAsUnorderedAccessView((UINT)ViscosityReg::ViscCoeffOut);
-            return rootParams;
         }
     };
 }

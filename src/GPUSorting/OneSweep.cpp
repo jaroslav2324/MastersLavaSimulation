@@ -8,22 +8,20 @@
  ******************************************************************************/
 #pragma once
 #include "pch.h"
-#include "OneSweep.h"
+#include "GPUSorting/OneSweep.h"
 
 OneSweep::OneSweep(
     winrt::com_ptr<ID3D12Device> _device,
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
-    GPUSorting::KEY_TYPE keyType) :
-    SweepBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        "OneSweep ",
-        4,
-        256,
-        1 << 13)
+    GPUSorting::KEY_TYPE keyType) : SweepBase(_device,
+                                              _deviceInfo,
+                                              sortingOrder,
+                                              keyType,
+                                              "OneSweep ",
+                                              4,
+                                              256,
+                                              1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();
@@ -35,17 +33,15 @@ OneSweep::OneSweep(
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
     GPUSorting::KEY_TYPE keyType,
-    GPUSorting::PAYLOAD_TYPE payloadType) :
-    SweepBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        payloadType,
-        "OneSweep ",
-        4,
-        256,
-        1 << 13)
+    GPUSorting::PAYLOAD_TYPE payloadType) : SweepBase(_device,
+                                                      _deviceInfo,
+                                                      sortingOrder,
+                                                      keyType,
+                                                      payloadType,
+                                                      "OneSweep ",
+                                                      4,
+                                                      256,
+                                                      1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();

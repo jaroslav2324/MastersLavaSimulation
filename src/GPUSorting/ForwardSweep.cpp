@@ -7,22 +7,20 @@
  *
  ******************************************************************************/
 #include "pch.h"
-#include "ForwardSweep.h"
+#include "GPUSorting/ForwardSweep.h"
 
 ForwardSweep::ForwardSweep(
-	winrt::com_ptr<ID3D12Device> _device,
-	GPUSorting::DeviceInfo _deviceInfo,
-	GPUSorting::ORDER sortingOrder,
-	GPUSorting::KEY_TYPE keyType) :
-    SweepBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        "ForwardSweep ",
-        4,
-        256,
-        1 << 13)
+    winrt::com_ptr<ID3D12Device> _device,
+    GPUSorting::DeviceInfo _deviceInfo,
+    GPUSorting::ORDER sortingOrder,
+    GPUSorting::KEY_TYPE keyType) : SweepBase(_device,
+                                              _deviceInfo,
+                                              sortingOrder,
+                                              keyType,
+                                              "ForwardSweep ",
+                                              4,
+                                              256,
+                                              1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();
@@ -34,17 +32,15 @@ ForwardSweep::ForwardSweep(
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
     GPUSorting::KEY_TYPE keyType,
-    GPUSorting::PAYLOAD_TYPE payloadType) :
-    SweepBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        payloadType,
-        "ForwardSweep ",
-        4,
-        256,
-        1 << 13)
+    GPUSorting::PAYLOAD_TYPE payloadType) : SweepBase(_device,
+                                                      _deviceInfo,
+                                                      sortingOrder,
+                                                      keyType,
+                                                      payloadType,
+                                                      "ForwardSweep ",
+                                                      4,
+                                                      256,
+                                                      1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();

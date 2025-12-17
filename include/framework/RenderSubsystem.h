@@ -8,6 +8,7 @@
 #include "Cube.h"
 #include "InputHandler.h"
 #include "ParticleSystem.h"
+#include "DescriptorAllocator.h"
 
 using namespace DirectX::SimpleMath;
 
@@ -34,6 +35,8 @@ public:
 	// Access the main command queue for uploads/compute dispatches
 	static ID3D12CommandQueue *GetCommandQueue();
 
+	static winrt::com_ptr<DescriptorAllocator> GetCBVSRVUAVAllocator() { return m_cbvSrvUavAllocator; };
+
 	static winrt::com_ptr<ID3D12Device> GetDevice();
 
 private:
@@ -55,9 +58,12 @@ private:
 	winrt::com_ptr<ID3D12CommandQueue> m_commandQueue;
 	winrt::com_ptr<IDXGISwapChain3> m_swapChain;
 
+	// TODO: replace with descriptor allocator
 	winrt::com_ptr<ID3D12DescriptorHeap> m_rtvHeap;
 	winrt::com_ptr<ID3D12DescriptorHeap> m_dsvHeap;
-	winrt::com_ptr<ID3D12DescriptorHeap> m_cbvSrvUavHeap;
+
+	static winrt::com_ptr<DescriptorAllocator> m_cbvSrvUavAllocator;
+	// winrt::com_ptr<ID3D12DescriptorHeap> m_cbvSrvUavHeap;
 
 	winrt::com_ptr<ID3D12CommandAllocator> m_commandAllocator;
 	winrt::com_ptr<ID3D12GraphicsCommandList> m_commandList;

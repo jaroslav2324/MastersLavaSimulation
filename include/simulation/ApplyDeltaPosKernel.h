@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "GPUSorting/ComputeKernelBase.h"
+#include "SimulationComputeKernelBase.h"
 
 namespace SimulationKernels
 {
@@ -11,19 +11,20 @@ namespace SimulationKernels
         DeltaP = 2       // u2
     };
 
-    class ApplyDeltaPos : public ComputeKernelBase
+    class ApplyDeltaPos : public SimulationComputeKernelBase
     {
     public:
         ApplyDeltaPos(
             winrt::com_ptr<ID3D12Device> device,
             const GPUSorting::DeviceInfo &info,
             const std::vector<std::wstring> &compileArguments,
-            const std::filesystem::path &shaderPath) : ComputeKernelBase(device,
-                                                                         info,
-                                                                         shaderPath,
-                                                                         L"CSMain",
-                                                                         compileArguments,
-                                                                         CreateRootParameters())
+            const std::filesystem::path &shaderPath,
+            winrt::com_ptr<ID3D12RootSignature> rootSignature) : SimulationComputeKernelBase(device,
+                                                                                             info,
+                                                                                             shaderPath,
+                                                                                             L"CSMain",
+                                                                                             compileArguments,
+                                                                                             rootSignature)
         {
         }
 
@@ -39,16 +40,6 @@ namespace SimulationKernels
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
-        }
-
-    protected:
-        const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
-        {
-            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(3);
-            rootParams[0].InitAsConstantBufferView(0);
-            rootParams[1].InitAsUnorderedAccessView((UINT)ApplyDeltaPosReg::PredictedRW);
-            rootParams[2].InitAsUnorderedAccessView((UINT)ApplyDeltaPosReg::DeltaP);
-            return rootParams;
         }
     };
 }

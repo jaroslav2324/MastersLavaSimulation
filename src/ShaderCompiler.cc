@@ -1,12 +1,12 @@
-#include "ShaderCompiler.h"
+#include "framework/ShaderCompiler.h"
 #include <d3dcompiler.h>
 #include <fstream>
 
 ShaderCompiler::CompileResult ShaderCompiler::CompileFromFile(
-    const std::wstring& filename,
-    const std::string& entryPoint,
-    const std::string& target,
-    const std::vector<D3D_SHADER_MACRO>& defines)
+    const std::wstring &filename,
+    const std::string &entryPoint,
+    const std::string &target,
+    const std::vector<D3D_SHADER_MACRO> &defines)
 {
     CompileResult result = {};
     UINT compileFlags = 0;
@@ -14,7 +14,7 @@ ShaderCompiler::CompileResult ShaderCompiler::CompileFromFile(
     compileFlags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #endif
 
-    const D3D_SHADER_MACRO* pDefines = defines.empty() ? nullptr : defines.data();
+    const D3D_SHADER_MACRO *pDefines = defines.empty() ? nullptr : defines.data();
 
     HRESULT hr = D3DCompileFromFile(
         filename.c_str(),
@@ -25,8 +25,7 @@ ShaderCompiler::CompileResult ShaderCompiler::CompileFromFile(
         compileFlags,
         0,
         result.bytecode.put(),
-        result.error.put()
-    );
+        result.error.put());
 
     result.success = SUCCEEDED(hr);
     return result;

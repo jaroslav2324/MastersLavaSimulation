@@ -7,10 +7,10 @@
  *
  ******************************************************************************/
 #include "pch.h"
-#include "DeviceRadixSort.h"
-#include "OneSweep.h"
-#include "FFXParallelSort.h"
-#include "Tests.h"
+#include "GPUSorting/DeviceRadixSort.h"
+#include "GPUSorting/OneSweep.h"
+#include "GPUSorting/FFXParallelSort.h"
+#include "GPUSorting/Tests.h"
 
 extern "C"
 {

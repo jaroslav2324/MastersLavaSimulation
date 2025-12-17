@@ -23,24 +23,22 @@
  * THE SOFTWARE.
  ******************************************************************************/
 #include "pch.h"
-#include "FFXParallelSort.h"
+#include "GPUSorting/FFXParallelSort.h"
 
 FFXParallelSort::FFXParallelSort(
     winrt::com_ptr<ID3D12Device> _device,
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
-    GPUSorting::KEY_TYPE keyType) :
-    GPUSortBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        GPUSorting::KEY_UINT32,
-        "FFXParallelSort ",
-        8,
-        16,
-        1 << 13,
-        GPUSorting::TuningParameters{ false, 4, 256, 1024, 0 }),  //Pass in a set of parameters to match FFX
-    k_maxThreadGroupsToRun(1024)
+    GPUSorting::KEY_TYPE keyType) : GPUSortBase(_device,
+                                                _deviceInfo,
+                                                sortingOrder,
+                                                GPUSorting::KEY_UINT32,
+                                                "FFXParallelSort ",
+                                                8,
+                                                16,
+                                                1 << 13,
+                                                GPUSorting::TuningParameters{false, 4, 256, 1024, 0}), // Pass in a set of parameters to match FFX
+                                    k_maxThreadGroupsToRun(1024)
 {
     m_device.copy_from(_device.get());
 
@@ -65,19 +63,17 @@ FFXParallelSort::FFXParallelSort(
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
     GPUSorting::KEY_TYPE keyType,
-    GPUSorting::PAYLOAD_TYPE payloadType) :
-    GPUSortBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        GPUSorting::KEY_UINT32,
-        GPUSorting::PAYLOAD_UINT32,
-        "FFXParallelSort ",
-        8,
-        16,
-        1 << 13,
-        GPUSorting::TuningParameters{ false, 4, 256, 1024, 0 }),  //Pass in a set of parameters to match FFX
-    k_maxThreadGroupsToRun(1024)
+    GPUSorting::PAYLOAD_TYPE payloadType) : GPUSortBase(_device,
+                                                        _deviceInfo,
+                                                        sortingOrder,
+                                                        GPUSorting::KEY_UINT32,
+                                                        GPUSorting::PAYLOAD_UINT32,
+                                                        "FFXParallelSort ",
+                                                        8,
+                                                        16,
+                                                        1 << 13,
+                                                        GPUSorting::TuningParameters{false, 4, 256, 1024, 0}), // Pass in a set of parameters to match FFX
+                                            k_maxThreadGroupsToRun(1024)
 {
     m_device.copy_from(_device.get());
 
@@ -178,23 +174,23 @@ void FFXParallelSort::InitStaticBuffers()
         D3D12_RESOURCE_FLAG_NONE);
 }
 
-//TO DO: This could be better. Too bad!
+// TO DO: This could be better. Too bad!
 void FFXParallelSort::InitBuffers(const uint32_t numKeys, const uint32_t threadBlocks)
 {
     if (!m_userProvidedSortBuffer)
         m_sortBuffer = CreateBuffer(
-        m_device,
-        numKeys * sizeof(uint32_t),
-        D3D12_HEAP_TYPE_DEFAULT,
-        D3D12_RESOURCE_STATE_COMMON,
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            m_device,
+            numKeys * sizeof(uint32_t),
+            D3D12_HEAP_TYPE_DEFAULT,
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     if (!m_userProvidedAltBuffer)
         m_altBuffer = CreateBuffer(
-        m_device,
-        numKeys * sizeof(uint32_t),
-        D3D12_HEAP_TYPE_DEFAULT,
-        D3D12_RESOURCE_STATE_COMMON,
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            m_device,
+            numKeys * sizeof(uint32_t),
+            D3D12_HEAP_TYPE_DEFAULT,
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
     m_sumTableBuffer = CreateBuffer(
         m_device,
@@ -214,37 +210,37 @@ void FFXParallelSort::InitBuffers(const uint32_t numKeys, const uint32_t threadB
     {
         if (!m_userProvidedSortPayloadBuffer)
             m_sortPayloadBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         if (!m_userProvidedAltPayloadBuffer)
             m_altPayloadBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     }
     else
     {
         if (!m_userProvidedSortPayloadBuffer)
             m_sortPayloadBuffer = CreateBuffer(
-            m_device,
-            1 * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                1 * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         if (!m_userProvidedAltPayloadBuffer)
             m_altPayloadBuffer = CreateBuffer(
-            m_device,
-            1 * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                1 * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     }
 }
 
@@ -269,8 +265,7 @@ void FFXParallelSort::PrepareSortCmdList()
         numThreadGroupsWithAdditionalBlocks = m_partitions % k_maxThreadGroupsToRun;
     }
 
-    numScanValues = k_radix * ((k_tuningParameters.partitionSize > numThreadGroupsToRun) ?
-        1 : divRoundUp(numThreadGroupsToRun, k_tuningParameters.partitionSize));
+    numScanValues = k_radix * ((k_tuningParameters.partitionSize > numThreadGroupsToRun) ? 1 : divRoundUp(numThreadGroupsToRun, k_tuningParameters.partitionSize));
     numReduceThreadGroupPerBin = numScanValues / k_radix;
 
     for (uint32_t radixShift = 0; radixShift < 32; radixShift += 4)

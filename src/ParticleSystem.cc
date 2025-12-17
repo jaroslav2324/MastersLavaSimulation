@@ -1,495 +1,213 @@
-#include "ParticleSystem.h"
-#include "RenderTemplatesAPI.h"
-#include "ShaderCompiler.h"
-#include "RenderSubsystem.h"
+#include "framework/ParticleSystem.h"
+#include "framework/RenderTemplatesAPI.h"
+#include "framework/ShaderCompiler.h"
+#include "framework/RenderSubsystem.h"
 #include <stdexcept>
 #include <vector>
 #include <random>
 #include <cstring>
 
+#pragma region INIT
 void ParticleSystem::Init(ID3D12Device *device)
 {
-    assert(device && "ParticleSystem::Init requires a valid ID3D12Device");
+    // TODO:
 
-    const uint64_t count = static_cast<uint64_t>(m_maxParticlesCount);
+    // create constant buffer
 
-    const uint64_t vec4Size = sizeof(float) * 4;
-    const uint64_t bufSizeVec4 = vec4Size * count;
+    InitSimulationBuffers(device, *RenderSubsystem::GetCBVSRVUAVAllocator(), m_maxParticlesCount, m_gridCellsCount);
 
-    const uint64_t floatSize = sizeof(float);
-    const uint64_t bufSizeFloat = floatSize * count;
+    CreateSimulationRootSignature(device);
 
-    D3D12_HEAP_PROPERTIES heapProps = MakeHeapProperties(D3D12_HEAP_TYPE_DEFAULT);
+    // create sort kernels
+    // set sort buffers
 
-    D3D12_RESOURCE_DESC descVec4 = GetBufferResourceDesc(bufSizeVec4);
-    descVec4.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    // create kernels
 
-    D3D12_RESOURCE_DESC descFloat = GetBufferResourceDesc(bufSizeFloat);
-    descFloat.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    // upload particles
+}
 
-    HRESULT hr = S_OK;
+void ParticleSystem::CreateSimulationRootSignature(ID3D12Device *device)
+{
+    CD3DX12_DESCRIPTOR_RANGE srvRange;
+    srvRange.Init(
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        12, // t0 - t11
+        0   // base register t0
+    );
+
+    CD3DX12_DESCRIPTOR_RANGE uavRange;
+    uavRange.Init(
+        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        14, // u0 - u13
+        0);
+
+    CD3DX12_ROOT_PARAMETER rootParams[3];
+
+    // SRV table
+    rootParams[0].InitAsDescriptorTable(
+        1, &srvRange,
+        D3D12_SHADER_VISIBILITY_ALL);
+
+    // UAV table
+    rootParams[1].InitAsDescriptorTable(
+        1, &uavRange,
+        D3D12_SHADER_VISIBILITY_ALL);
+
+    // Constant buffer b0
+    rootParams[2].InitAsConstantBufferView(
+        0, // b0
+        0,
+        D3D12_SHADER_VISIBILITY_ALL);
+
+    CD3DX12_ROOT_SIGNATURE_DESC rsDesc;
+    rsDesc.Init(
+        _countof(rootParams),
+        rootParams,
+        0, nullptr,
+        D3D12_ROOT_SIGNATURE_FLAG_NONE);
+
+    winrt::com_ptr<ID3DBlob> serialized;
+    winrt::com_ptr<ID3DBlob> error;
+
+    ThrowIfFailed(D3D12SerializeRootSignature(
+        &rsDesc,
+        D3D_ROOT_SIGNATURE_VERSION_1,
+        serialized.put(),
+        error.put()));
+
+    winrt::com_ptr<ID3D12RootSignature> rootSig;
+    ThrowIfFailed(device->CreateRootSignature(
+        0,
+        serialized->GetBufferPointer(),
+        serialized->GetBufferSize(),
+        IID_PPV_ARGS(rootSig.put())));
+
+    m_rootSignature = rootSig;
+}
+
+inline winrt::com_ptr<StructuredBuffer>
+CreateBuffer(
+    ID3D12Device *device,
+    DescriptorAllocator &alloc,
+    UINT count,
+    UINT stride)
+{
+    auto buf = winrt::make_self<StructuredBuffer>();
+    buf->Init(device, count, stride, alloc);
+    return buf;
+}
+
+void ParticleSystem::InitSimulationBuffers(
+    ID3D12Device *device,
+    DescriptorAllocator &alloc,
+    UINT numParticles,
+    UINT numCells)
+{
+    for (int i = 0; i < 2; ++i)
+    {
+        particleSwapBuffers.position[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(DirectX::SimpleMath::Vector3));
+
+        particleSwapBuffers.predictedPosition[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(DirectX::SimpleMath::Vector3));
+
+        particleSwapBuffers.velocity[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(DirectX::SimpleMath::Vector3));
+
+        particleSwapBuffers.temperature[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(float));
+    }
+
+    particleScratchBuffers.density = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(float));
+
+    particleScratchBuffers.constraintC = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(float));
+
+    particleScratchBuffers.lambda = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(float));
+
+    particleScratchBuffers.deltaP = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(DirectX::SimpleMath::Vector3));
+
+    particleScratchBuffers.viscosityMu = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(float));
+
+    particleScratchBuffers.viscosityCoeff = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(float));
+
+    particleScratchBuffers.cellStart = CreateBuffer(
+        device, alloc,
+        numCells,
+        sizeof(uint32_t));
+
+    particleScratchBuffers.cellEnd = CreateBuffer(
+        device, alloc,
+        numCells,
+        sizeof(uint32_t));
+
+    particleScratchBuffers.phase = CreateBuffer(
+        device, alloc,
+        numParticles,
+        sizeof(uint32_t));
 
     for (int i = 0; i < 2; ++i)
     {
-        hr = device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &descVec4,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(particleSwapBuffers.position[i].put()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create particle position buffer");
+        sortBuffers.hashBuffers[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(uint32_t));
 
-        hr = device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &descVec4,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(particleSwapBuffers.predictedPosition[i].put()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create particle predictedPosition buffer");
-
-        hr = device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &descVec4,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(particleSwapBuffers.velocity[i].put()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create particle velocity buffer");
-
-        hr = device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &descFloat,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(particleSwapBuffers.temperature[i].put()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create particle temperature buffer");
+        sortBuffers.indexBuffers[i] = CreateBuffer(
+            device, alloc,
+            numParticles,
+            sizeof(uint32_t));
     }
-
-    // Scratch buffers
-    hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &descFloat,
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(particleScratchBuffers.density.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create particle density scratch buffer");
-
-    hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &descFloat,
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(particleScratchBuffers.lambda.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create particle lambda scratch buffer");
-
-    hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &descFloat,
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(particleScratchBuffers.deltaP.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create particle deltaP scratch buffer");
-
-    hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &descFloat,
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(particleScratchBuffers.phase.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create particle phase scratch buffer");
-
-    // --- Create buffers for sorting ---
-    const uint64_t elemSize = sizeof(SortElement);
-    const uint64_t sortBufSize = elemSize * count;
-
-    D3D12_RESOURCE_DESC sortDesc = GetBufferResourceDesc(sortBufSize);
-    sortDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-    hr = device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &sortDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(sortBuffers[0].put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create sort buffer 0");
-    hr = device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &sortDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(sortBuffers[1].put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create sort buffer 1");
-
-    // blockCounts and prefix buffer (NumBlocks * 2 uints) - create as default buffer with UAV
-    uint32_t NumBlocks = static_cast<uint32_t>((count + 255) / 256);
-    uint32_t NumCounts = NumBlocks * 2;
-    uint64_t countsSize = sizeof(uint32_t) * NumCounts;
-
-    D3D12_RESOURCE_DESC countsDesc = GetBufferResourceDesc(countsSize);
-    countsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    hr = device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &countsDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(blockCounts.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create blockCounts buffer");
-    hr = device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &countsDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(prefixBuffer.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create prefix buffer");
-
-    // Readback for blockCounts
-    D3D12_HEAP_PROPERTIES readbackHeap = MakeHeapProperties(D3D12_HEAP_TYPE_READBACK);
-    D3D12_RESOURCE_DESC readbackDesc = GetBufferResourceDesc(countsSize);
-    readbackDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    hr = device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &readbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(blockCountsReadback.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create blockCounts readback buffer");
-
-    // Upload buffer for prefix
-    D3D12_HEAP_PROPERTIES uploadHeap = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-    D3D12_RESOURCE_DESC uploadDesc = GetBufferResourceDesc(countsSize);
-    uploadDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    hr = device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(prefixUpload.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create prefix upload buffer");
-
-    m_uavHeap = RenderSubsystem::GetCBVSRVUAVHeap();
-
-    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = m_uavHeap->GetCPUDescriptorHandleForHeapStart();
-    UINT increment = RenderSubsystem::GetCBVSRVUAVDescriptorSize();
-
-    // TODO: something wrong here?
-    // Input (u0)
-    // Output (u1)
-    cpuHandle.ptr += increment;
-    // BlockCounts (u2) - NumCounts uints
-    cpuHandle.ptr += increment;
-    // Prefix (u3)
-    cpuHandle.ptr += increment;
-    // Create UAV descriptors using helpers
-    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = MakeBufferUAVDesc(static_cast<UINT>(count), static_cast<UINT>(elemSize), DXGI_FORMAT_UNKNOWN);
-    device->CreateUnorderedAccessView(sortBuffers[0].get(), nullptr, &uavDesc, cpuHandle);
-
-    // Output (u1)
-    cpuHandle.ptr += increment;
-    device->CreateUnorderedAccessView(sortBuffers[1].get(), nullptr, &uavDesc, cpuHandle);
-
-    // BlockCounts (u2) - NumCounts uints
-    cpuHandle.ptr += increment;
-    D3D12_UNORDERED_ACCESS_VIEW_DESC bcDesc = MakeBufferUAVDesc(NumCounts, sizeof(uint32_t), DXGI_FORMAT_UNKNOWN);
-    device->CreateUnorderedAccessView(blockCounts.get(), nullptr, &bcDesc, cpuHandle);
-
-    // Prefix (u3)
-    cpuHandle.ptr += increment;
-    device->CreateUnorderedAccessView(prefixBuffer.get(), nullptr, &bcDesc, cpuHandle);
-
-    // Create compute pipelines (root signature + PSOs)
-    CreateSortPipelines(device);
-
-    // Fill sortBuffers[0] with random test data (keys and indices)
-    std::vector<uint32_t> initialData;
-    initialData.resize(static_cast<size_t>(count) * 2);
-    std::mt19937 rng(12345);
-    std::uniform_int_distribution<uint32_t> dist(0, 16);
-    for (uint64_t i = 0; i < 4; ++i)
-    {
-        initialData[i * 2 + 0] = dist(rng);                // key
-        initialData[i * 2 + 1] = static_cast<uint32_t>(i); // particleIndex
-    }
-    for (uint64_t i = 4; i < count; ++i)
-    {
-        initialData[i * 2 + 0] = 255;                                  // key
-        initialData[i * 2 + 1] = static_cast<uint32_t>(rng() % count); // particleIndex
-    }
-
-    // Create upload resource for initial data and copy into sortBuffers[0]
-    D3D12_RESOURCE_DESC initDesc = GetBufferResourceDesc(sortBufSize);
-    winrt::com_ptr<ID3D12Resource> uploadInit;
-    hr = device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &initDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(uploadInit.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create upload resource for initial sort data");
-
-    // Map and copy
-    uint8_t *mapPtr = nullptr;
-    D3D12_RANGE r = {0, 0};
-    uploadInit->Map(0, &r, reinterpret_cast<void **>(&mapPtr));
-    memcpy(mapPtr, initialData.data(), static_cast<size_t>(sortBufSize));
-    uploadInit->Unmap(0, nullptr);
-
-    // Copy uploadInit -> sortBuffers[0] using a short command list and the renderer's command queue
-    winrt::com_ptr<ID3D12CommandAllocator> tmpAlloc;
-    hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(tmpAlloc.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create temp alloc");
-    winrt::com_ptr<ID3D12GraphicsCommandList> tmpList;
-    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, tmpAlloc.get(), nullptr, IID_PPV_ARGS(tmpList.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create temp list");
-
-    tmpList->CopyResource(sortBuffers[0].get(), uploadInit.get());
-    tmpList->Close();
-
-    ID3D12CommandQueue *rendererQueue = RenderSubsystem::GetCommandQueue();
-    ID3D12CommandList *lists[] = {tmpList.get()};
-    rendererQueue->ExecuteCommandLists(1, lists);
-
-    // Wait for upload to finish
-    winrt::com_ptr<ID3D12Fence> fence;
-    device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put()));
-    HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    uint64_t fv = 1;
-    rendererQueue->Signal(fence.get(), fv);
-    if (fence->GetCompletedValue() < fv)
-    {
-        fence->SetEventOnCompletion(fv, ev);
-        WaitForSingleObject(ev, INFINITE);
-    }
-    CloseHandle(ev);
 }
+#pragma endregion
 
-// Create compute root signature and pipeline states for Count and Scatter kernels
-void ParticleSystem::CreateSortPipelines(ID3D12Device *device)
+#pragma region SIMULATE
+void ParticleSystem::Simulate(float dt)
 {
-    // descriptor ranges: UAVs u0-u3 (Input, Output, BlockCounts, Prefix)
-    D3D12_DESCRIPTOR_RANGE ranges[1] = {CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 0)};
+    // update constant buffer
 
-    D3D12_ROOT_PARAMETER rootParams[2] = {CreateDescriptorTableRootParam(&ranges[0], 1, D3D12_SHADER_VISIBILITY_ALL),
-                                          CreateCBVRootParam(0, 0, D3D12_SHADER_VISIBILITY_ALL)};
+    //     ID3D12DescriptorHeap* heaps[] = {
+    //     srvUavAllocator.GetHeap()
+    // };
+    // cmdList->SetDescriptorHeaps(1, heaps);
 
-    D3D12_ROOT_SIGNATURE_DESC rsDesc = {};
-    rsDesc.NumParameters = _countof(rootParams);
-    rsDesc.pParameters = rootParams;
-    rsDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+    // TODO: in kernel
+    //     cmdList->SetComputeRootDescriptorTable(
+    //     SRV_TABLE_SLOT,
+    //     srvUavAllocator.GetGpuHandle(density.srvIndex)
+    // );
 
-    winrt::com_ptr<ID3DBlob> serialized;
-    winrt::com_ptr<ID3DBlob> errors;
-    HRESULT hr = D3D12SerializeRootSignature(&rsDesc, D3D_ROOT_SIGNATURE_VERSION_1, serialized.put(), errors.put());
-    if (FAILED(hr))
-    {
-        if (errors)
-            OutputDebugStringA((char *)errors->GetBufferPointer());
-        throw std::runtime_error("Failed to serialize root signature for sort pipelines");
-    }
+    // cmdList->SetComputeRootSignature(m_rootSignature.get());
+    // predict position kernel
 
-    winrt::com_ptr<ID3DBlob> serialized2;
-    hr = D3D12SerializeRootSignature(&rsDesc, D3D_ROOT_SIGNATURE_VERSION_1, serialized2.put(), errors.put());
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to serialize root signature 2");
-    hr = device->CreateRootSignature(0, serialized2->GetBufferPointer(), serialized2->GetBufferSize(), IID_PPV_ARGS(ParticleSystem::m_csRootSig.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create compute root signature");
+    // sort
 
-    // Compile compute shaders
-    auto countResult = ShaderCompiler::CompileFromFile(
-        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\RadixSort.hlsl",
-        "CountKernel",
-        "cs_5_0");
-    if (!countResult.success)
-    {
-        if (countResult.error)
-            OutputDebugStringA((char *)countResult.error->GetBufferPointer());
-        throw std::runtime_error("Failed to compile CountKernel");
-    }
-
-    auto scatterResult = ShaderCompiler::CompileFromFile(
-        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\RadixSort.hlsl",
-        "ScatterKernel",
-        "cs_5_0");
-    if (!scatterResult.success)
-    {
-        if (scatterResult.error)
-            OutputDebugStringA((char *)scatterResult.error->GetBufferPointer());
-        throw std::runtime_error("Failed to compile ScatterKernel");
-    }
-
-    // Create PSO descs
-    D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.pRootSignature = ParticleSystem::m_csRootSig.get();
-    psoDesc.CS = {countResult.bytecode->GetBufferPointer(), countResult.bytecode->GetBufferSize()};
-    hr = device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(ParticleSystem::m_countPSO.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create count PSO");
-
-    psoDesc.CS = {scatterResult.bytecode->GetBufferPointer(), scatterResult.bytecode->GetBufferSize()};
-    hr = device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(ParticleSystem::m_scatterPSO.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create scatter PSO");
+    // cmdList->SetComputeRootSignature(m_rootSignature.get());
+    // other kernels
 }
-
-// CPU exclusive prefix sum
-static void ExclusivePrefixCPU(uint32_t *data, uint32_t length, std::vector<uint32_t> &outPrefix)
-{
-    outPrefix.resize(length);
-    uint64_t sum = 0;
-    for (uint32_t i = 0; i < length; ++i)
-    {
-        outPrefix[i] = static_cast<uint32_t>(sum);
-        sum += data[i];
-    }
-}
-
-void ParticleSystem::SortOnce(ID3D12Device *device, ID3D12CommandQueue *queue, uint32_t NumElements)
-{
-    if (!device || !queue)
-        throw std::runtime_error("SortOnce requires device and queue");
-
-    // Compute block counts length: NumBlocks = ceil(NumElements / 256)
-    const uint32_t THREADS = 256;
-    uint32_t NumBlocks = (NumElements + THREADS - 1) / THREADS;
-    uint32_t NumCounts = NumBlocks * 2; // zero/one per block
-
-    // Create a command allocator and list for the sort work
-    winrt::com_ptr<ID3D12CommandAllocator> alloc;
-    HRESULT hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(alloc.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create command allocator for sort");
-
-    winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
-    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, alloc.get(), nullptr, IID_PPV_ARGS(cmdList.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create command list for sort");
-
-    ID3D12DescriptorHeap *heaps[] = {m_uavHeap};
-    cmdList->SetDescriptorHeaps(1, heaps);
-
-    // Run CountKernel
-    cmdList->SetPipelineState(m_countPSO.get());
-    cmdList->SetComputeRootSignature(m_csRootSig.get());
-    // root table at 0 (uavs)
-    cmdList->SetComputeRootDescriptorTable(0, m_uavHeap->GetGPUDescriptorHandleForHeapStart());
-    // root CBV (params) will be set via root constant buffer later per-dispatch
-
-    // For simplicity, allocate a small upload buffer for Params and copy it to a GPU upload buffer bound as CBV
-    // Create an upload resource for params
-    D3D12_HEAP_PROPERTIES upHeap = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-    D3D12_RESOURCE_DESC paramDesc = GetBufferResourceDesc(sizeof(uint32_t) * 4);
-    winrt::com_ptr<ID3D12Resource> paramsUpload;
-    hr = device->CreateCommittedResource(&upHeap, D3D12_HEAP_FLAG_NONE, &paramDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(paramsUpload.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create params upload");
-
-    for (uint32_t shift = 0; shift < 32; ++shift)
-    {
-        // TODO: вынести
-        struct P
-        {
-            uint32_t g_Shift;
-            uint32_t NumElements;
-            uint32_t NumCounts;
-            uint32_t totalZeros;
-        } p;
-
-        p.g_Shift = shift;
-        p.NumElements = NumElements;
-        p.NumCounts = NumCounts;
-        p.totalZeros = 0; // will be set later
-
-        UINT8 *mapped = nullptr;
-        D3D12_RANGE r = {0, 0};
-        paramsUpload->Map(0, &r, reinterpret_cast<void **>(&mapped));
-        memcpy(mapped, &p, sizeof(p));
-        paramsUpload->Unmap(0, nullptr);
-
-        // Create a GPU-visible CBV for params in-place by using SetComputeRoot32BitConstants? Simpler: use SetComputeRootConstantBufferView
-        // First we need a GPU buffer for params: copy upload directly into default buffer for CBV is more complex. Instead, we can use root constants: pass 4 uints via SetComputeRoot32BitConstants
-        cmdList->SetComputeRoot32BitConstants(1, 4, &p, 0);
-
-        // Dispatch CountKernel
-        cmdList->Dispatch(NumBlocks, 1, 1);
-
-        // TODO: use helper function for barriers
-        // UAV barrier to ensure BlockCounts are written before copying/readback
-        D3D12_RESOURCE_BARRIER uavBarrier = {};
-        uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        uavBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        uavBarrier.UAV.pResource = blockCounts.get();
-        cmdList->ResourceBarrier(1, &uavBarrier);
-
-        // Copy blockCounts to readback buffer
-        cmdList->CopyResource(blockCountsReadback.get(), blockCounts.get());
-
-        // Close and execute
-        cmdList->Close();
-        ID3D12CommandList *lists[] = {cmdList.get()};
-        queue->ExecuteCommandLists(1, lists);
-
-        // Wait for GPU
-        winrt::com_ptr<ID3D12Fence> fence;
-        device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put()));
-        HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        uint64_t fenceVal = 1;
-        queue->Signal(fence.get(), fenceVal);
-        if (fence->GetCompletedValue() < fenceVal)
-        {
-            fence->SetEventOnCompletion(fenceVal, ev);
-            WaitForSingleObject(ev, INFINITE);
-        }
-        CloseHandle(ev);
-
-        // Map readback and compute prefix on CPU
-        D3D12_RANGE readRange = {0, NumCounts * sizeof(uint32_t)};
-        uint32_t *cbData = nullptr;
-        blockCountsReadback->Map(0, &readRange, reinterpret_cast<void **>(&cbData));
-
-        std::vector<uint32_t> cpuPrefix;
-        ExclusivePrefixCPU(cbData, NumCounts, cpuPrefix);
-        // compute totalZeros as sum of zeros across blocks (cpuPrefix[NumCounts-1] + last blockCounts value if needed)
-        uint32_t totalZeros = cpuPrefix.empty() ? 0 : (cpuPrefix[NumCounts - 1] + cbData[NumCounts - 1]);
-
-        blockCountsReadback->Unmap(0, nullptr);
-
-        // Upload prefix to GPU (prefixUpload is an upload resource created in Init)
-        // Map and copy cpuPrefix into prefixUpload
-        uint32_t *prefixMapped = nullptr;
-        prefixUpload->Map(0, &r, reinterpret_cast<void **>(&prefixMapped));
-        memcpy(prefixMapped, cpuPrefix.data(), NumCounts * sizeof(uint32_t));
-        prefixUpload->Unmap(0, nullptr);
-
-        // Copy upload -> GPU prefixBuffer
-        // Need a new command list for this copy and subsequent scatter dispatch
-        alloc->Reset();
-        cmdList->Reset(alloc.get(), nullptr);
-        cmdList->CopyResource(prefixBuffer.get(), prefixUpload.get());
-
-        // Update params totalZeros and set root constants
-        p.totalZeros = totalZeros;
-        cmdList->SetComputeRoot32BitConstants(1, 4, &p, 0);
-
-        // Scatter dispatch
-        cmdList->SetPipelineState(m_scatterPSO.get());
-        cmdList->SetComputeRootSignature(m_csRootSig.get());
-        cmdList->SetComputeRootDescriptorTable(0, m_uavHeap->GetGPUDescriptorHandleForHeapStart());
-        cmdList->Dispatch(NumBlocks, 1, 1);
-
-        // UAV barrier to ensure Output written
-        D3D12_RESOURCE_BARRIER uavBarrier2 = {};
-        uavBarrier2.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        uavBarrier2.UAV.pResource = sortBuffers[0].get();
-        cmdList->ResourceBarrier(1, &uavBarrier2);
-
-        cmdList->Close();
-        ID3D12CommandList *lists2[] = {cmdList.get()};
-        queue->ExecuteCommandLists(1, lists2);
-
-        // Wait again for completion
-        device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put()));
-        ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        fenceVal++;
-        queue->Signal(fence.get(), fenceVal);
-        if (fence->GetCompletedValue() < fenceVal)
-        {
-            fence->SetEventOnCompletion(fenceVal, ev);
-            WaitForSingleObject(ev, INFINITE);
-        }
-        CloseHandle(ev);
-
-        // TODO: ???
-        // swap input/output pointers (we used sortBuffers[0] as input and [1] as output - but shader expects Input->Output as bound via UAVs in heap order)
-        // For simplicity, we won't swap heap slots here; assume heap contains Input then Output and we swap resources behind them
-        std::swap(sortBuffers[0], sortBuffers[1]);
-    }
-}
+#pragma endregion

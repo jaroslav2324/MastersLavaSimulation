@@ -1,6 +1,6 @@
-#include "Cube.h"
+#include "framework/Cube.h"
 
-#include "RenderTemplatesAPI.h"
+#include "framework/RenderTemplatesAPI.h"
 
 void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
 {

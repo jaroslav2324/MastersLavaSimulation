@@ -18,7 +18,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(WIL)
 
 add_subdirectory(src)
-add_subdirectory(GPUSorting)
+add_subdirectory(src/GPUSorting)
 
 add_executable(${PROJECT_NAME} main.cc ${SRC_FILES} ${SORT_SOURCES})
 

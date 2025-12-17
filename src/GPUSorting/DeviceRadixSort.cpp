@@ -8,22 +8,20 @@
  ******************************************************************************/
 #pragma once
 #include "pch.h"
-#include "DeviceRadixSort.h"
+#include "GPUSorting/DeviceRadixSort.h"
 
 DeviceRadixSort::DeviceRadixSort(
     winrt::com_ptr<ID3D12Device> _device,
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
-    GPUSorting::KEY_TYPE keyType) :
-    GPUSortBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        "DeviceRadixSort ",
-        4,
-        256,
-        1 << 13)
+    GPUSorting::KEY_TYPE keyType) : GPUSortBase(_device,
+                                                _deviceInfo,
+                                                sortingOrder,
+                                                keyType,
+                                                "DeviceRadixSort ",
+                                                4,
+                                                256,
+                                                1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();
@@ -35,17 +33,15 @@ DeviceRadixSort::DeviceRadixSort(
     GPUSorting::DeviceInfo _deviceInfo,
     GPUSorting::ORDER sortingOrder,
     GPUSorting::KEY_TYPE keyType,
-    GPUSorting::PAYLOAD_TYPE payloadType) :
-    GPUSortBase(
-        _device,
-        _deviceInfo,
-        sortingOrder,
-        keyType,
-        payloadType,
-        "DeviceRadixSort ",
-        4,
-        256,
-        1 << 13)
+    GPUSorting::PAYLOAD_TYPE payloadType) : GPUSortBase(_device,
+                                                        _deviceInfo,
+                                                        sortingOrder,
+                                                        keyType,
+                                                        payloadType,
+                                                        "DeviceRadixSort ",
+                                                        4,
+                                                        256,
+                                                        1 << 13)
 {
     m_device.copy_from(_device.get());
     SetCompileArguments();
@@ -78,7 +74,7 @@ bool DeviceRadixSort::TestAll()
     printf("\n");
     printf("%u / %u passed. \n", sortPayloadTestsPassed, k_tuningParameters.partitionSize + 1);
 
-    UpdateSize(1 << 22); //TODO: BAD!
+    UpdateSize(1 << 22); // TODO: BAD!
     printf("Beginning interthreadblock scan validation tests. \n");
     uint32_t scanTestsPassed = 0;
     for (uint32_t i = 1; i < 256; ++i)
@@ -91,9 +87,9 @@ bool DeviceRadixSort::TestAll()
     printf("\n");
     printf("%u / %u passed. \n", scanTestsPassed, 255);
 
-    //Validate the multi-dispatching approach to handle large inputs.
-    //This has extremely large memory requirements. So we check to make
-    //sure we can do it.
+    // Validate the multi-dispatching approach to handle large inputs.
+    // This has extremely large memory requirements. So we check to make
+    // sure we can do it.
     printf("Beginning large size tests\n");
     sortPayloadTestsPassed += ValidateSort(1 << 21, 5);
     sortPayloadTestsPassed += ValidateSort(1 << 22, 7);
@@ -103,12 +99,12 @@ bool DeviceRadixSort::TestAll()
     uint64_t maxDimTestSize = k_maxDispatchDimension * k_tuningParameters.partitionSize;
 
     uint64_t staticMemoryRequirements =
-        (k_radix * k_radixPasses * sizeof(uint32_t)) +      //This is the global histogram
-        (sizeof(uint32_t)) +                                //The error buffer
-        k_maxReadBack * sizeof(uint32_t);                   //The readback buffer
+        (k_radix * k_radixPasses * sizeof(uint32_t)) + // This is the global histogram
+        (sizeof(uint32_t)) +                           // The error buffer
+        k_maxReadBack * sizeof(uint32_t);              // The readback buffer
 
-    //Multiply by 4 for sort, payload, alt, alt payload, add 1
-    //in case fragmentation of the memory causes issues when spilling into shared system memory. 
+    // Multiply by 4 for sort, payload, alt, alt payload, add 1
+    // in case fragmentation of the memory causes issues when spilling into shared system memory.
     uint64_t pairsMemoryRequirements =
         (k_maxDispatchDimension * k_tuningParameters.partitionSize * sizeof(uint32_t) * 5) +
         staticMemoryRequirements +
@@ -126,7 +122,7 @@ bool DeviceRadixSort::TestAll()
         printf("Warning, device does not have enough memory to test multi-dispatch");
         printf(" handling of very large inputs. These tests have been skipped\n");
     }
-    
+
     if (sortPayloadTestsPassed + scanTestsPassed == testsExpected)
     {
         printf("%u / %u  All tests passed. \n\n", testsExpected, testsExpected);
@@ -209,18 +205,18 @@ void DeviceRadixSort::InitBuffers(const uint32_t numKeys, const uint32_t threadB
 {
     if (!m_userProvidedSortBuffer)
         m_sortBuffer = CreateBuffer(
-        m_device,
-        numKeys * sizeof(uint32_t),
-        D3D12_HEAP_TYPE_DEFAULT,
-        D3D12_RESOURCE_STATE_COMMON,
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            m_device,
+            numKeys * sizeof(uint32_t),
+            D3D12_HEAP_TYPE_DEFAULT,
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     if (!m_userProvidedAltBuffer)
         m_altBuffer = CreateBuffer(
-        m_device,
-        numKeys * sizeof(uint32_t),
-        D3D12_HEAP_TYPE_DEFAULT,
-        D3D12_RESOURCE_STATE_COMMON,
-        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            m_device,
+            numKeys * sizeof(uint32_t),
+            D3D12_HEAP_TYPE_DEFAULT,
+            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
     m_passHistBuffer = CreateBuffer(
         m_device,
@@ -233,37 +229,37 @@ void DeviceRadixSort::InitBuffers(const uint32_t numKeys, const uint32_t threadB
     {
         if (!m_userProvidedSortPayloadBuffer)
             m_sortPayloadBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         if (!m_userProvidedAltPayloadBuffer)
             m_altPayloadBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     }
     else
     {
         if (!m_userProvidedSortPayloadBuffer)
             m_sortPayloadBuffer = CreateBuffer(
-            m_device,
-            1 * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                1 * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         if (!m_userProvidedAltPayloadBuffer)
             m_altPayloadBuffer = CreateBuffer(
-            m_device,
-            1 * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                1 * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     }
 }
 

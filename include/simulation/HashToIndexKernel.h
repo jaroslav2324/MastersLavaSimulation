@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "GPUSorting/ComputeKernelBase.h"
+#include "SimulationComputeKernelBase.h"
 
 namespace SimulationKernels
 {
@@ -23,19 +23,20 @@ namespace SimulationKernels
      * Input: sorted hash values (from GPUSorting)
      * Output: cell start indices (one entry per cell containing particle index)
      */
-    class HashToIndex : public ComputeKernelBase
+    class HashToIndex : public SimulationComputeKernelBase
     {
     public:
         HashToIndex(
             winrt::com_ptr<ID3D12Device> device,
             const GPUSorting::DeviceInfo &info,
             const std::vector<std::wstring> &compileArguments,
-            const std::filesystem::path &shaderPath) : ComputeKernelBase(device,
-                                                                         info,
-                                                                         shaderPath,
-                                                                         L"CS_FindCellRanges",
-                                                                         compileArguments,
-                                                                         CreateRootParameters())
+            const std::filesystem::path &shaderPath,
+            winrt::com_ptr<ID3D12RootSignature> rootSignature) : SimulationComputeKernelBase(device,
+                                                                                             info,
+                                                                                             shaderPath,
+                                                                                             L"CS_FindCellRanges",
+                                                                                             compileArguments,
+                                                                                             rootSignature)
         {
         }
 
@@ -65,17 +66,6 @@ namespace SimulationKernels
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
-        }
-
-    protected:
-        const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
-        {
-            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(4);
-            rootParams[0].InitAsConstantBufferView(0); // SimParams (b0)
-            rootParams[1].InitAsShaderResourceView((UINT)HashToIndexReg::Hashes);
-            rootParams[2].InitAsUnorderedAccessView((UINT)HashToIndexReg::CellStart);
-            rootParams[3].InitAsUnorderedAccessView((UINT)HashToIndexReg::CellEnd);
-            return rootParams;
         }
     };
 }

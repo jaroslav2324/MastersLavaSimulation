@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "GPUSorting/ComputeKernelBase.h"
+#include "SimulationComputeKernelBase.h"
 
 namespace SimulationKernels
 {
@@ -20,19 +20,20 @@ namespace SimulationKernels
      * Input: particle positions (world space)
      * Output: hash values, particle indices
      */
-    class CellHash : public ComputeKernelBase
+    class CellHash : public SimulationComputeKernelBase
     {
     public:
         CellHash(
             winrt::com_ptr<ID3D12Device> device,
             const GPUSorting::DeviceInfo &info,
             const std::vector<std::wstring> &compileArguments,
-            const std::filesystem::path &shaderPath) : ComputeKernelBase(device,
-                                                                         info,
-                                                                         shaderPath,
-                                                                         L"CS_HashParticles",
-                                                                         compileArguments,
-                                                                         CreateRootParameters())
+            const std::filesystem::path &shaderPath,
+            winrt::com_ptr<ID3D12RootSignature> rootSignature) : SimulationComputeKernelBase(device,
+                                                                                             info,
+                                                                                             shaderPath,
+                                                                                             L"CS_HashParticles",
+                                                                                             compileArguments,
+                                                                                             rootSignature)
         {
         }
 
@@ -73,17 +74,6 @@ namespace SimulationKernels
             // Dispatch in groups of 256 threads
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
-        }
-
-    protected:
-        const std::vector<CD3DX12_ROOT_PARAMETER1> CreateRootParameters() override
-        {
-            auto rootParams = std::vector<CD3DX12_ROOT_PARAMETER1>(4);
-            rootParams[0].InitAsConstants(6, 0); // [worldMin(3*f32), cellSize(f32), numParticles(u32), hashTableMask(u32)]
-            rootParams[1].InitAsShaderResourceView((UINT)SpatialHashReg::PositionBuffer);
-            rootParams[2].InitAsUnorderedAccessView((UINT)SpatialHashReg::HashBuffer);
-            rootParams[3].InitAsUnorderedAccessView((UINT)SpatialHashReg::IndexBuffer);
-            return rootParams;
         }
     };
 }
