@@ -1,17 +1,11 @@
-#include "framework/ParticleSystem.h"
+#include "framework/SimulationSystem.h"
 #include "framework/RenderTemplatesAPI.h"
 #include "framework/ShaderCompiler.h"
 #include "framework/RenderSubsystem.h"
 #include "GPUSorting/OneSweep.h"
-#include <stdexcept>
-#include <vector>
-#include <random>
-#include <cstring>
-#include <algorithm>
-#include <filesystem>
 
 #pragma region INIT
-void ParticleSystem::Init(ID3D12Device *device)
+void SimulationSystem::Init(ID3D12Device *device)
 {
     // initialize simulation buffers (SRV/UAV descriptors)
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
@@ -228,7 +222,7 @@ void ParticleSystem::Init(ID3D12Device *device)
     m_simParamsUpload->Unmap(0, nullptr);
 }
 
-void ParticleSystem::CreateSimulationRootSignature(ID3D12Device *device)
+void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 {
     CD3DX12_DESCRIPTOR_RANGE srvRange;
     srvRange.Init(
@@ -287,19 +281,19 @@ void ParticleSystem::CreateSimulationRootSignature(ID3D12Device *device)
     m_rootSignature = rootSig;
 }
 
-inline winrt::com_ptr<StructuredBuffer>
+inline std::shared_ptr<StructuredBuffer>
 CreateBuffer(
     ID3D12Device *device,
     DescriptorAllocator &alloc,
     UINT count,
     UINT stride)
 {
-    auto buf = winrt::make_self<StructuredBuffer>();
+    auto buf = std::make_shared<StructuredBuffer>();
     buf->Init(device, count, stride, alloc);
     return buf;
 }
 
-void ParticleSystem::InitSimulationBuffers(
+void SimulationSystem::InitSimulationBuffers(
     ID3D12Device *device,
     DescriptorAllocator &alloc,
     UINT numParticles,
@@ -389,7 +383,7 @@ void ParticleSystem::InitSimulationBuffers(
 #pragma endregion
 
 #pragma region SIMULATE
-void ParticleSystem::Simulate(float dt)
+void SimulationSystem::Simulate(float dt)
 {
     // update time step
     m_simParams.dt = dt;
@@ -574,5 +568,22 @@ void ParticleSystem::Simulate(float dt)
         WaitForSingleObject(ev, INFINITE);
         CloseHandle(ev);
     }
+}
+#pragma endregion
+
+// TODO: move to StructuredBuffer?
+#pragma region GETTERS
+D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetPositionBufferSRV()
+{
+    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
+    UINT idx = particleSwapBuffers.position[m_currentSwapIndex]->srvIndex;
+    return alloc->GetGpuHandle(idx);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetTemperatureBufferSRV()
+{
+    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
+    UINT idx = particleSwapBuffers.temperature[m_currentSwapIndex]->srvIndex;
+    return alloc->GetGpuHandle(idx);
 }
 #pragma endregion

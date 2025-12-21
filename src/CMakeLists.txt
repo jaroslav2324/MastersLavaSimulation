@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 set(SRC_FILES 
     src/Camera.cc
     src/RenderSubsystem.cc
-    src/ParticleSystem.cc
+    src/SimulationSystem.cc
     src/ShaderCompiler.cc
     src/Cube.cc
     src/InputHandler.cc

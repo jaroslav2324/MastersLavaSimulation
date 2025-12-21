@@ -40,7 +40,7 @@ struct StructuredBuffer
         srv.Buffer.StructureByteStride = stride;
 
         device->CreateShaderResourceView(
-            resource.Get(), &srv, alloc.GetCpuHandle(srvIndex));
+            resource.get(), &srv, alloc.GetCpuHandle(srvIndex));
 
         // UAV
         uavIndex = alloc.Alloc();
@@ -52,6 +52,6 @@ struct StructuredBuffer
         uav.Buffer.StructureByteStride = stride;
 
         device->CreateUnorderedAccessView(
-            resource.Get(), nullptr, &uav, alloc.GetCpuHandle(uavIndex));
+            resource.get(), nullptr, &uav, alloc.GetCpuHandle(uavIndex));
     }
 };

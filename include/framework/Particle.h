@@ -38,42 +38,42 @@ struct SimParams
 struct ParticleStateSwapBuffers
 {
     // x_i
-    winrt::com_ptr<StructuredBuffer> position[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> position[2] = {nullptr};
 
     // q_i*
-    winrt::com_ptr<StructuredBuffer> predictedPosition[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> predictedPosition[2] = {nullptr};
 
     // v_i
-    winrt::com_ptr<StructuredBuffer> velocity[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> velocity[2] = {nullptr};
 
     // T_i
-    winrt::com_ptr<StructuredBuffer> temperature[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> temperature[2] = {nullptr};
 };
 
 struct ParticleScratchBuffers
 {
     //  PBF
-    winrt::com_ptr<StructuredBuffer> density = nullptr;     // ρ_i
-    winrt::com_ptr<StructuredBuffer> constraintC = nullptr; // C_i
-    winrt::com_ptr<StructuredBuffer> lambda = nullptr;      // λ_i
-    winrt::com_ptr<StructuredBuffer> deltaP = nullptr;      // Δp_i
+    std::shared_ptr<StructuredBuffer> density = nullptr;     // ρ_i
+    std::shared_ptr<StructuredBuffer> constraintC = nullptr; // C_i
+    std::shared_ptr<StructuredBuffer> lambda = nullptr;      // λ_i
+    std::shared_ptr<StructuredBuffer> deltaP = nullptr;      // Δp_i
 
     // Viscosity
-    winrt::com_ptr<StructuredBuffer> viscosityMu = nullptr;    // μ_i
-    winrt::com_ptr<StructuredBuffer> viscosityCoeff = nullptr; // normalized coeff
+    std::shared_ptr<StructuredBuffer> viscosityMu = nullptr;    // μ_i
+    std::shared_ptr<StructuredBuffer> viscosityCoeff = nullptr; // normalized coeff
 
     // Grid
-    winrt::com_ptr<StructuredBuffer> cellStart = nullptr; // per-cell
-    winrt::com_ptr<StructuredBuffer> cellEnd = nullptr;
+    std::shared_ptr<StructuredBuffer> cellStart = nullptr; // per-cell
+    std::shared_ptr<StructuredBuffer> cellEnd = nullptr;
 
     // Optional
-    winrt::com_ptr<StructuredBuffer> phase = nullptr; // solid/liquid/etc
+    std::shared_ptr<StructuredBuffer> phase = nullptr; // solid/liquid/etc
 };
 
 struct SortBuffers
 {
     // RWStructuredBuffer<uint>
-    winrt::com_ptr<StructuredBuffer> hashBuffers[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> hashBuffers[2] = {nullptr};
     // RWStructuredBuffer<uint>
-    winrt::com_ptr<StructuredBuffer> indexBuffers[2] = {nullptr};
+    std::shared_ptr<StructuredBuffer> indexBuffers[2] = {nullptr};
 };

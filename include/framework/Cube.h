@@ -4,6 +4,7 @@
 
 #include "Transform.h"
 #include "CubeConstBuffer.h"
+#include "DescriptorAllocator.h"
 
 using winrt::com_ptr;
 using namespace DirectX::SimpleMath;
@@ -37,7 +38,7 @@ public:
     void Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *cmdList);
     void Draw(ID3D12GraphicsCommandList *commandList);
 
-    void CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, UINT heapIndex);
+    void CreateConstBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT heapIndex);
     void UpdateConstBuffer();
 
     Transform &GetTransform() { return transform; }

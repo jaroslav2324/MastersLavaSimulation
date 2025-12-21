@@ -101,7 +101,7 @@ void Cube::Initialize(ID3D12Device *dev, ID3D12GraphicsCommandList *commandList)
     indexBufferView.SizeInBytes = sizeof(indices);
 }
 
-void Cube::CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, UINT heapIndex)
+void Cube::CreateConstBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT heapIndex)
 {
     D3D12_HEAP_PROPERTIES heapProps = MakeHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
     D3D12_RESOURCE_DESC cbDesc = GetBufferResourceDesc((sizeof(CubeConstBuffer) + 255) & ~255);
@@ -121,15 +121,12 @@ void Cube::CreateConstBuffer(ID3D12Device *device, ID3D12DescriptorHeap *heap, U
     cbvDesc.BufferLocation = m_constBufferAddress;
     cbvDesc.SizeInBytes = (sizeof(CubeConstBuffer) + 255) & ~255;
 
-    // compute CPU descriptor handle for this slot
-    m_constBufferView = heap->GetCPUDescriptorHandleForHeapStart();
-    SIZE_T increment = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    m_constBufferView.ptr += static_cast<SIZE_T>(heapIndex) * increment;
+    // allocate descriptor slot from allocator and create CBV there
+    UINT idx = alloc.Alloc();
+    m_constBufferView = alloc.GetCpuHandle(idx);
     device->CreateConstantBufferView(&cbvDesc, m_constBufferView);
 
-    // compute GPU descriptor handle for this slot (for SetGraphicsRootDescriptorTable)
-    m_constBufferGPUHandle = heap->GetGPUDescriptorHandleForHeapStart();
-    m_constBufferGPUHandle.ptr += static_cast<SIZE_T>(heapIndex) * increment;
+    m_constBufferGPUHandle = alloc.GetGpuHandle(idx);
 }
 
 void Cube::UpdateConstBuffer()

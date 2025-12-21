@@ -1,13 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <cmath>
-
 #include "pch.h"
 #include "Particle.h"
-#include <memory>
+
 #include "GPUSorting/GPUSorting.h"
 #include "GPUSorting/OneSweep.h"
+
 // simulation kernels
 #include "simulation/PredictPositionsKernel.h"
 #include "simulation/CellHashKernel.h"
@@ -22,16 +20,10 @@
 #include "simulation/HeatTransferKernel.h"
 #include "simulation/CollisionProjectionKernel.h"
 
-struct SortElement
-{
-    uint32_t key;
-    uint32_t particleIndex;
-};
-
-class ParticleSystem
+class SimulationSystem
 {
 public:
-    ParticleSystem() = delete;
+    SimulationSystem() = delete;
     static void Init(ID3D12Device *device);
 
     static void SwapParticleBuffers() // TODO: is this needed?
@@ -40,6 +32,10 @@ public:
     }
 
     static void Simulate(float dt);
+    // Return GPU descriptor handle to current particle positions SRV
+    static D3D12_GPU_DESCRIPTOR_HANDLE GetPositionBufferSRV();
+    static D3D12_GPU_DESCRIPTOR_HANDLE GetTemperatureBufferSRV();
+    static uint32_t GetNumParticles() { return m_simParams.numParticles; }
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
@@ -62,8 +58,8 @@ private:
     inline static std::unique_ptr<SimulationKernels::Viscosity> m_viscosity = nullptr;
     inline static std::unique_ptr<SimulationKernels::ApplyViscosity> m_applyViscosity = nullptr;
     inline static std::unique_ptr<SimulationKernels::HeatTransfer> m_heatTransfer = nullptr;
-    inline static std::unique_ptr<OneSweep> m_oneSweep = nullptr;
     inline static std::unique_ptr<SimulationKernels::CollisionProjection> m_collisionProjection = nullptr;
+    inline static std::unique_ptr<OneSweep> m_oneSweep = nullptr;
 
     inline static winrt::com_ptr<ID3D12RootSignature> m_rootSignature = nullptr;
 

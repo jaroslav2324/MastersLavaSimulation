@@ -64,16 +64,6 @@ inline static D3D12_ROOT_PARAMETER CreateDescriptorTableRootParam(const D3D12_DE
     return p;
 }
 
-inline static D3D12_ROOT_PARAMETER CreateCBVRootParam(UINT shaderRegister, UINT registerSpace = 0, D3D12_SHADER_VISIBILITY vis = D3D12_SHADER_VISIBILITY_ALL)
-{
-    D3D12_ROOT_PARAMETER p = {};
-    p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-    p.Descriptor.ShaderRegister = shaderRegister;
-    p.Descriptor.RegisterSpace = registerSpace;
-    p.ShaderVisibility = vis;
-    return p;
-}
-
 // Parameterized heap properties helper
 inline static D3D12_HEAP_PROPERTIES MakeHeapProperties(D3D12_HEAP_TYPE type = D3D12_HEAP_TYPE_DEFAULT, UINT creationNodeMask = 1, UINT visibleNodeMask = 1)
 {
@@ -82,18 +72,4 @@ inline static D3D12_HEAP_PROPERTIES MakeHeapProperties(D3D12_HEAP_TYPE type = D3
     props.CreationNodeMask = creationNodeMask;
     props.VisibleNodeMask = visibleNodeMask;
     return props;
-}
-
-// Helper to create a UAV buffer description for RWStructuredBuffer or raw buffer
-inline static D3D12_UNORDERED_ACCESS_VIEW_DESC MakeBufferUAVDesc(UINT numElements, UINT stride = sizeof(uint32_t), DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN)
-{
-    D3D12_UNORDERED_ACCESS_VIEW_DESC d = {};
-    d.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-    d.Format = format;
-    d.Buffer.FirstElement = 0;
-    d.Buffer.NumElements = numElements;
-    d.Buffer.StructureByteStride = stride;
-    d.Buffer.CounterOffsetInBytes = 0;
-    d.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-    return d;
 }

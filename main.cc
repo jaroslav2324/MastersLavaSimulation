@@ -2,50 +2,12 @@
 #include "pch.h"
 
 #include "framework/RenderSubsystem.h"
-
-#include "GPUSorting/GPUSorting.h"
-#include "GPUSorting/FFXParallelSort.h"
-#include "GPUSorting/DeviceRadixSort.h"
-#include "GPUSorting/OneSweep.h"
+#include "framework/SimulationSystem.h"
 
 int main(int argc, char **argv)
 {
-
-	RenderSubsystem renderer;
-	renderer.Initialize();
-
-	winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
-	// GPUSorting::DeviceInfo deviceInfo = GetDeviceInfo(device.get());
-
-	// DeviceRadixSort *drs = new DeviceRadixSort(
-	// 	device,
-	// 	deviceInfo,
-	// 	GPUSorting::ORDER_ASCENDING,
-	// 	GPUSorting::KEY_UINT32,
-	// 	GPUSorting::PAYLOAD_UINT32);
-	// drs->TestAll();
-	// drs->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
-	// drs->~DeviceRadixSort();
-
-	// OneSweep *oneSweep = new OneSweep(
-	// 	device,
-	// 	deviceInfo,
-	// 	GPUSorting::ORDER_ASCENDING,
-	// 	GPUSorting::KEY_UINT32,
-	// 	GPUSorting::PAYLOAD_UINT32);
-	// oneSweep->TestAll();
-	// oneSweep->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
-	// oneSweep->~OneSweep();
-
-	// FFXParallelSort *ffxPs = new FFXParallelSort(
-	// 	device,
-	// 	deviceInfo,
-	// 	GPUSorting::ORDER_ASCENDING,
-	// 	GPUSorting::KEY_UINT32,
-	// 	GPUSorting::PAYLOAD_UINT32);
-	// ffxPs->TestAll();
-	// ffxPs->BatchTiming(1 << 20, 100, 10, GPUSorting::ENTROPY_PRESET_1);
-	// ffxPs->~FFXParallelSort();
+	RenderSubsystem::Init();
+	SimulationSystem::Init(RenderSubsystem::GetDevice().get());
 
 	MSG msg = {};
 	while (msg.message != WM_QUIT)
@@ -57,11 +19,12 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			renderer.Draw();
+			// TODO: pass delta time
+			SimulationSystem::Simulate(1.0f / 60.0f);
+			RenderSubsystem::Draw();
 		}
 	}
 
-	renderer.Shutdown();
-
+	RenderSubsystem::Destroy();
 	return 0;
 }

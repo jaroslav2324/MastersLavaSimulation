@@ -1,33 +1,11 @@
 #include "framework/RenderSubsystem.h"
 
-#include <chrono>
-#include <stdexcept>
-#include <cassert>
-
-#include <SimpleMath.h>
-
 #include "framework/ShaderCompiler.h"
-
 #include "framework/RenderTemplatesAPI.h"
-
-RenderSubsystem *RenderSubsystem::s_instance = nullptr;
-
-ID3D12DescriptorHeap *RenderSubsystem::GetCBVSRVUAVHeap()
-{
-    assert(s_instance && "RenderSubsystem instance is null in GetCBVSRVUAVHeap");
-    return s_instance->m_cbvSrvUavHeap.get();
-}
-
-UINT RenderSubsystem::GetCBVSRVUAVDescriptorSize()
-{
-    assert(s_instance && "RenderSubsystem instance is null in GetCBVSRVUAVDescriptorSize");
-    return s_instance->m_cbvSrvUavDescriptorSize;
-}
 
 ID3D12CommandQueue *RenderSubsystem::GetCommandQueue()
 {
-    assert(s_instance && "RenderSubsystem instance is null in GetCommandQueue");
-    return s_instance->m_commandQueue.get();
+    return m_commandQueue.get();
 }
 
 winrt::com_ptr<ID3D12Device> RenderSubsystem::GetDevice()
@@ -35,13 +13,8 @@ winrt::com_ptr<ID3D12Device> RenderSubsystem::GetDevice()
     return m_device;
 }
 
-void RenderSubsystem::Initialize()
+void RenderSubsystem::Init()
 {
-    if (s_instance)
-        throw std::runtime_error("RenderSubsystem already initialized.");
-
-    s_instance = this;
-
     m_width = 800;
     m_height = 600;
     m_windowHandle = CreateMainWindow(GetModuleHandle(nullptr), (int)m_width, (int)m_height, L"DX12 Window");
@@ -69,8 +42,8 @@ void RenderSubsystem::Initialize()
 
     CreateGlobalConstantBuffer();
 
-    cube1.CreateConstBuffer(m_device.get(), m_cbvSrvUavHeap.get(), 1);
-    cube2.CreateConstBuffer(m_device.get(), m_cbvSrvUavHeap.get(), 2);
+    cube1.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocator, 1);
+    cube2.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocator, 2);
 
     CreateRootSignatureAndPipeline();
 
@@ -78,7 +51,7 @@ void RenderSubsystem::Initialize()
     ID3D12CommandList *ppCommandLists[] = {m_commandList.get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
-    // ParticleSystem::Init(m_device.get());
+    // SimulationSystem::Init(m_device.get());
 }
 
 void RenderSubsystem::CreateGlobalConstantBuffer()
@@ -121,7 +94,9 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
     cbvDesc.BufferLocation = m_globalCBAddress;
     cbvDesc.SizeInBytes = (sizeof(GlobalConstants) + 255) & ~255;
-    m_globalCBV = m_cbvSrvUavHeap->GetCPUDescriptorHandleForHeapStart();
+    // allocate a slot in the CBV/SRV/UAV allocator and write CBV there
+    UINT cbIndex = m_cbvSrvUavAllocator->Alloc();
+    m_globalCBV = m_cbvSrvUavAllocator->GetCpuHandle(cbIndex);
     m_device->CreateConstantBufferView(&cbvDesc, m_globalCBV);
 }
 
@@ -354,7 +329,8 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DSV descriptor heap.");
 
-    m_cbvSrvUavAllocator = winrt::make_self<DescriptorAllocator>(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, true);
+    m_cbvSrvUavAllocator = std::make_shared<DescriptorAllocator>();
+    m_cbvSrvUavAllocator->Init(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, true);
 
     m_rtvHeapStart = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     m_dsvHeapStart = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -423,7 +399,7 @@ void RenderSubsystem::CreateDepthStencil()
     m_device->CreateDepthStencilView(m_depthStencil.get(), &dsvDesc, m_dsvHeapStart);
 }
 
-void RenderSubsystem::Shutdown()
+void RenderSubsystem::Destroy()
 {
     // Ensure GPU is done before releasing resources
     if (m_commandQueue && m_fence)
@@ -513,12 +489,26 @@ void RenderSubsystem::Draw()
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     UpdateGlobalConstantBuffer();
-    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavHeap.get()};
+    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavAllocator->GetHeap()};
     m_commandList->SetDescriptorHeaps(1, heaps);
-    m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavHeap->GetGPUDescriptorHandleForHeapStart());
+    m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavAllocator->GetHeap()->GetGPUDescriptorHandleForHeapStart());
 
     cube1.Draw(m_commandList.get());
     cube2.Draw(m_commandList.get());
+
+    // --- Draw particles ---
+    // Bind particle SRVs (root params 2 and 3)
+    D3D12_GPU_DESCRIPTOR_HANDLE posHandle = SimulationSystem::GetPositionBufferSRV();
+    D3D12_GPU_DESCRIPTOR_HANDLE tempHandle = SimulationSystem::GetTemperatureBufferSRV();
+    m_commandList->SetGraphicsRootDescriptorTable(2, posHandle);
+    m_commandList->SetGraphicsRootDescriptorTable(3, tempHandle);
+
+    // Draw quads (4 vertices per particle) instanced
+    uint32_t particleCount = SimulationSystem::GetNumParticles();
+
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    // Vertex shader uses SV_VertexID/SV_InstanceID to generate quad, so draw 4 vertices per instance
+    m_commandList->DrawInstanced(4, particleCount, 0, 0);
 
     // Transition back buffer to present
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -543,16 +533,22 @@ void RenderSubsystem::Draw()
     }
 }
 
-// test pipline
+// test pipeline
 void RenderSubsystem::CreateRootSignatureAndPipeline()
 {
-    D3D12_DESCRIPTOR_RANGE ranges[2] = {CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0),
-                                        CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1)};
+    // Root signature: keep CBV tables at indices 0 and 1 for existing cube code,
+    // and reserve SRV tables at indices 2 and 3 for particle position and temperature.
+    D3D12_DESCRIPTOR_RANGE cbvRange0 = CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+    D3D12_DESCRIPTOR_RANGE cbvRange1 = CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
+    D3D12_DESCRIPTOR_RANGE srvRangePos = CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+    D3D12_DESCRIPTOR_RANGE srvRangeTemp = CreateDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
-    D3D12_ROOT_PARAMETER rootParams[2] = {CreateDescriptorTableRootParam(&ranges[0], 1, D3D12_SHADER_VISIBILITY_ALL),
-                                          CreateDescriptorTableRootParam(&ranges[1], 1, D3D12_SHADER_VISIBILITY_ALL)};
+    D3D12_ROOT_PARAMETER rootParams[4] = {
+        CreateDescriptorTableRootParam(&cbvRange0, 1, D3D12_SHADER_VISIBILITY_ALL),
+        CreateDescriptorTableRootParam(&cbvRange1, 1, D3D12_SHADER_VISIBILITY_ALL),
+        CreateDescriptorTableRootParam(&srvRangePos, 1, D3D12_SHADER_VISIBILITY_ALL),
+        CreateDescriptorTableRootParam(&srvRangeTemp, 1, D3D12_SHADER_VISIBILITY_ALL)};
 
-    // TODO: replace with helper function
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.NumParameters = _countof(rootParams);
     rootSignatureDesc.pParameters = rootParams;
@@ -574,9 +570,9 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create root signature.");
 
-    // --- changed: compile shaders from file using ShaderCompiler ---
+    // Compile rendering shaders
     auto vsResult = ShaderCompiler::CompileFromFile(
-        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\rendering\\Vertex.hlsl",
         "VSMain",
         "vs_5_0");
     if (!vsResult.success)
@@ -587,7 +583,7 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
     }
 
     auto psResult = ShaderCompiler::CompileFromFile(
-        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\rendering\\Pixel.hlsl",
         "PSMain",
         "ps_5_0");
     if (!psResult.success)
@@ -597,15 +593,9 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
         throw std::runtime_error("Failed to compile pixel shader from file.");
     }
 
-    // Input layout: POSITION as float4 to match Cube vertex (Vector4)
-    D3D12_INPUT_ELEMENT_DESC inputLayout[] =
-        {
-            {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-        };
-
-    // PSO description
+    // No input layout (vertex shader uses SV_VertexID/SV_InstanceID)
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
+    psoDesc.InputLayout = {nullptr, 0};
     psoDesc.pRootSignature = m_rootSignature.get();
     psoDesc.VS = {vsResult.bytecode->GetBufferPointer(), vsResult.bytecode->GetBufferSize()};
     psoDesc.PS = {psResult.bytecode->GetBufferPointer(), psResult.bytecode->GetBufferSize()};
@@ -624,12 +614,10 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
         throw std::runtime_error("Failed to create pipeline state.");
 }
 
-// NEW: static WndProc forwards to instance
 LRESULT CALLBACK RenderSubsystem::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (s_instance)
-        return s_instance->WndProc(hwnd, msg, wParam, lParam);
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
+    return WndProc(hwnd, msg, wParam, lParam);
+    // return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 LRESULT RenderSubsystem::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
