@@ -35,8 +35,8 @@ public:
 	// Access the main command queue for uploads/compute dispatches
 	static ID3D12CommandQueue *GetCommandQueue();
 
+	static GPUSorting::DeviceInfo GetDeviceInfo() { return g_deviceInfo; };
 	static winrt::com_ptr<DescriptorAllocator> GetCBVSRVUAVAllocator() { return m_cbvSrvUavAllocator; };
-
 	static winrt::com_ptr<ID3D12Device> GetDevice();
 
 private:
@@ -54,9 +54,13 @@ private:
 	void CreateRenderTargetViews();
 	void CreateDepthStencil();
 
+	GPUSorting::DeviceInfo GetDeviceInfo(ID3D12Device *device);
+
 	inline static winrt::com_ptr<ID3D12Device> m_device = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> m_commandQueue;
 	winrt::com_ptr<IDXGISwapChain3> m_swapChain;
+
+	inline static GPUSorting::DeviceInfo g_deviceInfo = {};
 
 	// TODO: replace with descriptor allocator
 	winrt::com_ptr<ID3D12DescriptorHeap> m_rtvHeap;

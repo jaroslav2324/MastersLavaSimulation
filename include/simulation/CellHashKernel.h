@@ -51,22 +51,12 @@ namespace SimulationKernels
         void Dispatch(
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
             uint32_t numParticles,
-            const Vector3 &worldMin,
-            float cellSize,
-            uint32_t hashTableMask,
             const D3D12_GPU_VIRTUAL_ADDRESS &positionBuffer,
             const D3D12_GPU_VIRTUAL_ADDRESS &hashBuffer,
             const D3D12_GPU_VIRTUAL_ADDRESS &indexBuffer)
         {
-            // Constant buffer: [worldMin(f32x3), cellSize(f32), numParticles(u32), hashTableMask(u32)]
-            std::array<uint32_t, 6> constants;
-            memcpy(constants.data(), &worldMin.x, sizeof(Vector3));
-            memcpy(reinterpret_cast<float *>(constants.data()) + 3, &cellSize, sizeof(float));
-            constants[4] = numParticles;
-            constants[5] = hashTableMask;
-
             SetPipelineState(cmdList);
-            cmdList->SetComputeRoot32BitConstants(0, (uint32_t)constants.size(), constants.data(), 0);
+            // !!! Caller must bind SimParams CBV at root 0
             cmdList->SetComputeRootShaderResourceView(1, positionBuffer);
             cmdList->SetComputeRootUnorderedAccessView(2, hashBuffer);
             cmdList->SetComputeRootUnorderedAccessView(3, indexBuffer);

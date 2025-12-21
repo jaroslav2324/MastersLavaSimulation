@@ -9,7 +9,7 @@ RWStructuredBuffer<float3> gVelocityDst           : register(u1);
 [numthreads(256, 1, 1)]
 void CSMain(uint3 tid : SV_DispatchThreadID)
 {
-    uint idx = tid.x; // TODO: точно правильный индекс?
+    uint idx = tid.x; 
     if (idx >= numParticles) return;
 
     float3 pos = gPositionsSrc[idx];
