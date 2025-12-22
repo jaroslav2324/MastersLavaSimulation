@@ -445,7 +445,7 @@ protected:
 
     virtual void InitUtilityComputeShaders()
     {
-        const std::filesystem::path path = "Shaders/Utility.hlsl";
+        const std::filesystem::path path = "shaders/sort/Utility.hlsl";
         m_initSortInput = new UtilityKernels::InitSortInput(m_device, m_devInfo, m_compileArguments, path);
         m_clearErrorCount = new UtilityKernels::ClearErrorCount(m_device, m_devInfo, m_compileArguments, path);
         m_validate = new UtilityKernels::Validate(m_device, m_devInfo, m_compileArguments, path);

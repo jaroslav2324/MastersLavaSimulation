@@ -83,39 +83,39 @@ void SimulationSystem::Init(ID3D12Device *device)
     uploadResource->Unmap(0, nullptr);
 
     // prepare single command allocator/list to perform GPU copies for both swap buffers
-    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
-    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.GetAddressOf())));
-    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(cmdList.GetAddressOf())));
+    winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
+    winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
+    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
+    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
 
     // copy into first swap buffer (COMMON -> COPY -> UAV)
     UploadHelpers::CopyBufferToResource(
-        cmdList.Get(),
-        uploadResource.Get(),
-        particleSwapBuffers.position[0]->resource.Get(),
+        cmdList.get(),
+        uploadResource.get(),
+        particleSwapBuffers.position[0]->resource.get(),
         uploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     // copy into second swap buffer (COMMON -> COPY -> UAV)
     UploadHelpers::CopyBufferToResource(
-        cmdList.Get(),
-        uploadResource.Get(),
-        particleSwapBuffers.position[1]->resource.Get(),
+        cmdList.get(),
+        uploadResource.get(),
+        particleSwapBuffers.position[1]->resource.get(),
         uploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ThrowIfFailed(cmdList->Close());
-    ID3D12CommandList *lists[] = {cmdList.Get()};
+    ID3D12CommandList *lists[] = {cmdList.get()};
     auto queue = RenderSubsystem::GetCommandQueue();
     queue->ExecuteCommandLists(1, lists);
 
     // create a fence and wait once for the uploads to complete
-    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())));
+    winrt::com_ptr<ID3D12Fence> fence;
+    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
     uint64_t fenceVal = 1;
-    RenderSubsystem::WaitForFence(fence.Get(), fenceVal);
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 
     InitSortIndexBuffers(device, *alloc, m_maxParticlesCount);
 
@@ -346,24 +346,24 @@ void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllo
     memcpy(pUpload, hostIndices.data(), uploadSize);
     uploadResource->Unmap(0, nullptr);
 
-    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
-    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.GetAddressOf())));
-    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(cmdList.GetAddressOf())));
+    winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
+    winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
+    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
+    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
 
-    auto dstRes = sortBuffers.indexBuffers[0]->resource.Get();
-    UploadHelpers::CopyBufferToResource(cmdList.Get(), uploadResource.Get(), dstRes, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    auto dstRes = sortBuffers.indexBuffers[0]->resource.get();
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), dstRes, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ThrowIfFailed(cmdList->Close());
-    ID3D12CommandList *lists[] = {cmdList.Get()};
+    ID3D12CommandList *lists[] = {cmdList.get()};
     auto queue = RenderSubsystem::GetCommandQueue();
     queue->ExecuteCommandLists(1, lists);
 
     // fence and wait
-    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())));
+    winrt::com_ptr<ID3D12Fence> fence;
+    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
     uint64_t fenceVal = 1;
-    RenderSubsystem::WaitForFence(fence.Get(), fenceVal);
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 }
 #pragma endregion
 
@@ -374,14 +374,11 @@ void SimulationSystem::Simulate(float dt)
     m_simParams.dt = dt;
 
     // copy updated SimParams into the upload constant buffer
-    if (m_simParamsUpload)
-    {
-        D3D12_RANGE readRange{0, 0};
-        void *pData = nullptr;
-        ThrowIfFailed(m_simParamsUpload->Map(0, &readRange, &pData));
-        memcpy(pData, &m_simParams, sizeof(SimParams));
-        m_simParamsUpload->Unmap(0, nullptr);
-    }
+    D3D12_RANGE readRange{0, 0};
+    void *pData = nullptr;
+    ThrowIfFailed(m_simParamsUpload->Map(0, &readRange, &pData));
+    memcpy(pData, &m_simParams, sizeof(SimParams));
+    m_simParamsUpload->Unmap(0, nullptr);
 
     // prepare command allocator and list
     auto device = RenderSubsystem::GetDevice();
@@ -395,8 +392,9 @@ void SimulationSystem::Simulate(float dt)
     ID3D12DescriptorHeap *heaps[] = {alloc->GetHeap()};
     cmdList->SetDescriptorHeaps(1, heaps);
 
-    // bind SimParams CBV at root 0 for kernels that expect it
-    cmdList->SetComputeRootConstantBufferView(0, m_simParamsUpload->GetGPUVirtualAddress());
+    cmdList->SetComputeRootSignature(m_rootSignature.get());
+
+    cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
 
     const uint32_t numParticles = static_cast<uint32_t>(m_simParams.numParticles);
     // determine source/destination swap indices
@@ -443,16 +441,16 @@ void SimulationSystem::Simulate(float dt)
     }
 
     // 4) Configure OneSweep to use our hash/index buffers and sort
-    if (m_oneSweep)
-    {
-        m_oneSweep->SetAllBuffers(
-            sortBuffers.hashBuffers[0]->resource,
-            sortBuffers.indexBuffers[0]->resource,
-            sortBuffers.hashBuffers[1]->resource,
-            sortBuffers.indexBuffers[1]->resource,
-            true);
-        m_oneSweep->Sort();
-    }
+    // if (m_oneSweep)
+    // {
+    m_oneSweep->SetAllBuffers(
+        sortBuffers.hashBuffers[0]->resource,
+        sortBuffers.indexBuffers[0]->resource,
+        sortBuffers.hashBuffers[1]->resource,
+        sortBuffers.indexBuffers[1]->resource,
+        true);
+    m_oneSweep->Sort();
+    //}
 
     // After sorting, hashes and indices are in sortBuffers.hashBuffers[0] and sortBuffers.indexBuffers[0]
 

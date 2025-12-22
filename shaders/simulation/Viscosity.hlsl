@@ -1,3 +1,4 @@
+#include "CommonData.hlsl"
 
 // Computes mu_i from log(log(mu+gamma)) = q - y*log(T)
 // mu = exp( A * T^{-y} ) - gamma,  A = exp(q)

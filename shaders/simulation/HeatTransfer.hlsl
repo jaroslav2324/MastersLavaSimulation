@@ -32,6 +32,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
     {
         int3 nc = int3(cell) + int3(dx, dy, dz);
 
+// TODO: IsCellValid check
         if (nc.x < 0 || nc.y < 0 || nc.z < 0) continue;
         if (nc.x >= gridResolution.x || nc.y >= gridResolution.y || nc.z >= gridResolution.z) continue;
 
@@ -54,7 +55,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float Tj = temperature[j];
             float rhoj = density[j];
             float kj = GetThermalConductivity(Tj);
-            float mj = massBuffer[j];
 
             // kernel gradient
             float3 gradW = cubic_kernel_gradient(rij);
@@ -68,7 +68,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             // term = (m_j / rho_j) * (k_j*T_j - k_i*T_i) * dotTerm / denom
             float diffTerm = (kj * Tj) - (ki * Ti);
 
-            laplacian += (mj / rhoj) * diffTerm * (dotTerm / denom);
+            laplacian += (mass / rhoj) * diffTerm * (dotTerm / denom);
         }
     }
 

@@ -1,4 +1,4 @@
-#include "CommonData.hlsl"
+#include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted : register(t1);
 StructuredBuffer<float3> velocitiesIn : register(t2);
@@ -35,7 +35,14 @@ void CSMain(uint gid : SV_DispatchThreadID)
     for (int dx = -1; dx <= 1; dx++)
     {
         int3 nc = int3(cell) + int3(dx,dy,dz);
-        if (!IsCellValid(nc)) continue;
+
+        if (nc.x < 0 || nc.y < 0 || nc.z < 0 ||
+            nc.x >= gridResolution.x ||
+            nc.y >= gridResolution.y ||
+            nc.z >= gridResolution.z)
+        {
+            continue;
+        }
 
         uint hash = GetCellHash(uint3(nc));
         uint start = cellStart[hash];
@@ -52,7 +59,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
             if (r2 >= h2) continue;
 
-            float W = cubic_kernel(rij);
+            float W = cubic_kernel_height(rij);
             dv += (velocitiesIn[j] - vi) * W;
         }
     }

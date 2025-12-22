@@ -20,8 +20,8 @@ void RenderSubsystem::Init()
     m_height = 600;
     m_windowHandle = CreateMainWindow(GetModuleHandle(nullptr), (int)m_width, (int)m_height, L"DX12 Window");
 
-    g_deviceInfo = GetDeviceInfo(m_device.get());
     CreateDevice();
+    g_deviceInfo = GetDeviceInfo(m_device.get());
 
     CreateFence();
     GetDescriptorSizes();
@@ -133,51 +133,53 @@ void RenderSubsystem::CreateDevice()
     }
 #endif
 
-    winrt::com_ptr<IDXGIFactory4> factory;
-    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.put()));
-    if (FAILED(hr))
-        throw std::runtime_error("Failed to create DXGI Factory.");
+    winrt::com_ptr<IDXGIFactory6> factory;
+    ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(factory.put())));
 
-    winrt::com_ptr<IDXGIAdapter1> hardwareAdapter;
-    for (UINT adapterIndex = 0;; ++adapterIndex)
+    winrt::com_ptr<IDXGIAdapter1> bestAdapter;
+    SIZE_T bestVideoMemory = 0;
+
+    for (UINT i = 0;; ++i)
     {
-        if (DXGI_ERROR_NOT_FOUND == factory->EnumAdapters1(adapterIndex, hardwareAdapter.put()))
+        winrt::com_ptr<IDXGIAdapter1> adapter;
+        if (factory->EnumAdapterByGpuPreference(
+                i,
+                DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                IID_PPV_ARGS(adapter.put())) == DXGI_ERROR_NOT_FOUND)
         {
-            break; // No more adapters to enumerate.
+            break;
         }
 
         DXGI_ADAPTER_DESC1 desc;
-        hardwareAdapter->GetDesc1(&desc);
+        adapter->GetDesc1(&desc);
 
-        // Skip software adapters
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
             continue;
 
-        // Try to create device
-        hr = D3D12CreateDevice(
-            hardwareAdapter.get(),
-            D3D_FEATURE_LEVEL_11_0,
-            IID_PPV_ARGS(m_device.put()));
+        // Проверяем, что D3D12 реально поддерживается
+        if (FAILED(D3D12CreateDevice(
+                adapter.get(),
+                D3D_FEATURE_LEVEL_11_0,
+                __uuidof(ID3D12Device),
+                nullptr)))
+        {
+            continue;
+        }
 
-        if (SUCCEEDED(hr))
-            break;
+        if (desc.DedicatedVideoMemory > bestVideoMemory)
+        {
+            bestVideoMemory = desc.DedicatedVideoMemory;
+            bestAdapter = adapter;
+        }
     }
 
-    // Fallback to WARP device if no hardware adapter found
-    if (!m_device)
-    {
-        winrt::com_ptr<IDXGIAdapter> warpAdapter;
-        factory->EnumWarpAdapter(IID_PPV_ARGS(warpAdapter.put()));
-        hr = D3D12CreateDevice(
-            warpAdapter.get(),
-            D3D_FEATURE_LEVEL_11_0,
-            IID_PPV_ARGS(m_device.put()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create D3D12 device.");
-    }
+    if (!bestAdapter)
+        throw std::runtime_error("No suitable hardware adapter found.");
 
-    if (Check4xMSAAQualitySupport() < 1)
-        throw std::runtime_error("Device does not support 4x MSAA.");
+    ThrowIfFailed(D3D12CreateDevice(
+        bestAdapter.get(),
+        D3D_FEATURE_LEVEL_11_0,
+        IID_PPV_ARGS(m_device.put())));
 }
 
 void RenderSubsystem::CreateFence()

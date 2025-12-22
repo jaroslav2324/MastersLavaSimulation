@@ -5,7 +5,7 @@
 
 namespace UploadHelpers
 {
-    Microsoft::WRL::ComPtr<ID3D12Resource> CreateUploadBuffer(ID3D12Device *device, UINT64 size);
+    winrt::com_ptr<ID3D12Resource> CreateUploadBuffer(ID3D12Device *device, UINT64 size);
 
     // Copy from an upload resource to dst resource and transition dst from 'before' to 'after'
     void CopyBufferToResource(

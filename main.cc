@@ -6,6 +6,8 @@
 
 int main(int argc, char **argv)
 {
+	// std::cout << std::filesystem::current_path() << std::endl;
+
 	RenderSubsystem::Init();
 	SimulationSystem::Init(RenderSubsystem::GetDevice().get());
 

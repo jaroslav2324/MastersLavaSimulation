@@ -17,13 +17,14 @@ uint GetCellHash(uint3 c)
          + c.z * gridResolution.x * gridResolution.y;
 }
 
-const float kTemperatureSolid = 900;
-const float kTemperatureLiquid = 1200;
-const float kConductivitySolid = 2.0;
-const float kConductivityLiquid = 2.5;
+
 
 float GetThermalConductivity(float T)
 {
+    const float kTemperatureSolid = 900;
+    const float kTemperatureLiquid = 1200;
+    const float kConductivitySolid = 2.0;
+    const float kConductivityLiquid = 2.5;
     float a = saturate((T - kTemperatureSolid) / (kTemperatureLiquid - kTemperatureSolid));
     return lerp(kConductivitySolid, kConductivityLiquid, a);
 }

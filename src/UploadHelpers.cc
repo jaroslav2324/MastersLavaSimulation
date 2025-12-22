@@ -5,19 +5,19 @@
 
 namespace UploadHelpers
 {
-    Microsoft::WRL::ComPtr<ID3D12Resource> CreateUploadBuffer(ID3D12Device *device, UINT64 size)
+    winrt::com_ptr<ID3D12Resource> CreateUploadBuffer(ID3D12Device *device, UINT64 size)
     {
         CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
         CD3DX12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(size);
 
-        Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+        winrt::com_ptr<ID3D12Resource> upload;
         ThrowIfFailed(device->CreateCommittedResource(
             &heapProps,
             D3D12_HEAP_FLAG_NONE,
             &desc,
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
-            IID_PPV_ARGS(upload.GetAddressOf())));
+            IID_PPV_ARGS(upload.put())));
 
         return upload;
     }
