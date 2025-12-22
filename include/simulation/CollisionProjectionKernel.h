@@ -4,13 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class CollisionProjectionReg
-    {
-        Params = 0,             // b0
-        PredictedPositions = 0, // u0
-        Velocity = 1            // u1
-    };
-
     class CollisionProjection : public SimulationComputeKernelBase
     {
     public:
@@ -35,9 +28,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &velocity)
         {
             SetPipelineState(cmdList);
-            // Caller must bind SimParams CBV at root 0
-            cmdList->SetComputeRootUnorderedAccessView(1, predictedPositions);
-            cmdList->SetComputeRootUnorderedAccessView(2, velocity);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

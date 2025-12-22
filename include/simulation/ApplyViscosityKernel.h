@@ -4,18 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class ApplyViscosityReg
-    {
-        Params = 0,        // b0
-        Predicted = 1,     // t1
-        VelocitiesIn = 2,  // t2
-        SortedIndices = 4, // t4
-        CellStart = 5,     // t5
-        CellEnd = 6,       // t6
-        ViscCoeff = 11,    // t11
-        VelocitiesOut = 1  // u1
-    };
-
     class ApplyViscosity : public SimulationComputeKernelBase
     {
     public:
@@ -45,13 +33,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &velocitiesOut)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootShaderResourceView(1, predicted);
-            cmdList->SetComputeRootShaderResourceView(2, velocitiesIn);
-            cmdList->SetComputeRootShaderResourceView(3, sortedIndices);
-            cmdList->SetComputeRootShaderResourceView(4, cellStart);
-            cmdList->SetComputeRootShaderResourceView(5, cellEnd);
-            cmdList->SetComputeRootShaderResourceView(6, viscCoeff);
-            cmdList->SetComputeRootUnorderedAccessView(7, velocitiesOut);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

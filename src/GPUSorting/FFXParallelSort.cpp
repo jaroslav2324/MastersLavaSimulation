@@ -122,7 +122,7 @@ void FFXParallelSort::SetCompileArguments()
 
 void FFXParallelSort::InitComputeShaders()
 {
-    const std::filesystem::path path = "Shaders/FFXParallelSort.hlsl";
+    const std::filesystem::path path = "shaders/sort/FFXParallelSort.hlsl";
     m_psCount = new FFXParallelSortKernels::FfxPsCount(m_device, m_devInfo, m_compileArguments, path);
     m_psCountReduce = new FFXParallelSortKernels::FfxPsCountReduce(m_device, m_devInfo, m_compileArguments, path);
     m_psScan = new FFXParallelSortKernels::FfxPsScan(m_device, m_devInfo, m_compileArguments, path);

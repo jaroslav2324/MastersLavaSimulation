@@ -4,17 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class ComputeDeltaPosReg
-    {
-        Params = 0,        // b0
-        Predicted = 1,     // t1
-        SortedIndices = 4, // t4
-        CellStart = 5,     // t5
-        CellEnd = 6,       // t6
-        Lambda = 10,       // t10
-        DeltaPOut = 2      // u2
-    };
-
     class ComputeDeltaPos : public SimulationComputeKernelBase
     {
     public:
@@ -43,12 +32,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &deltaPOut)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootShaderResourceView(1, predicted);
-            cmdList->SetComputeRootShaderResourceView(2, sortedIndices);
-            cmdList->SetComputeRootShaderResourceView(3, cellStart);
-            cmdList->SetComputeRootShaderResourceView(4, cellEnd);
-            cmdList->SetComputeRootShaderResourceView(5, lambdaBuf);
-            cmdList->SetComputeRootUnorderedAccessView(6, deltaPOut);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

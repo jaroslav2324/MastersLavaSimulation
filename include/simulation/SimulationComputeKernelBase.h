@@ -37,7 +37,6 @@ protected:
     void SetPipelineState(winrt::com_ptr<ID3D12GraphicsCommandList> cmdList)
     {
         cmdList->SetPipelineState(m_computePipelineStateDesc.get());
-        cmdList->SetComputeRootSignature(m_rootSignature.get());
     }
 
 private:

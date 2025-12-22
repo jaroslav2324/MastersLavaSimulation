@@ -21,10 +21,10 @@ protected:
     winrt::com_ptr<ID3D12Resource> m_passHistBuffer;
     winrt::com_ptr<ID3D12Resource> m_globalHistBuffer;
 
-    SweepCommonKernels::InitSweep* m_initSweep;
-    SweepCommonKernels::GlobalHist* m_globalHist;
-    SweepCommonKernels::Scan* m_scan;
-    SweepCommonKernels::DigitBinningPass* m_digitPass;
+    SweepCommonKernels::InitSweep *m_initSweep = nullptr;
+    SweepCommonKernels::GlobalHist *m_globalHist = nullptr;
+    SweepCommonKernels::Scan *m_scan = nullptr;
+    SweepCommonKernels::DigitBinningPass *m_digitPass = nullptr;
 
     uint32_t m_globalHistPartitions;
 
@@ -67,21 +67,19 @@ public:
         GPUSorting::DeviceInfo _deviceInfo,
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
-        uint32_t maxReadBack) :
-        GPUSortBase(
-            _device,
-            _deviceInfo,
-            sortingOrder,
-            keyType,
-            sortName,
-            radixPasses,
-            radix,
-            maxReadBack)
+        uint32_t maxReadBack) : GPUSortBase(_device,
+                                            _deviceInfo,
+                                            sortingOrder,
+                                            keyType,
+                                            sortName,
+                                            radixPasses,
+                                            radix,
+                                            maxReadBack)
     {
-        //TODO: better exception handling
+        // TODO: better exception handling
         if (!m_devInfo.SupportsOneSweep)
             printf("Warning this device does not support Sweep family sorting, correct execution is not guarunteed");
     }
@@ -92,28 +90,38 @@ public:
         GPUSorting::ORDER sortingOrder,
         GPUSorting::KEY_TYPE keyType,
         GPUSorting::PAYLOAD_TYPE payloadType,
-        const char* sortName,
+        const char *sortName,
         uint32_t radixPasses,
         uint32_t radix,
-        uint32_t maxReadBack) :
-        GPUSortBase(
-            _device,
-            _deviceInfo,
-            sortingOrder,
-            keyType,
-            payloadType,
-            sortName,
-            radixPasses,
-            radix,
-            maxReadBack)
+        uint32_t maxReadBack) : GPUSortBase(_device,
+                                            _deviceInfo,
+                                            sortingOrder,
+                                            keyType,
+                                            payloadType,
+                                            sortName,
+                                            radixPasses,
+                                            radix,
+                                            maxReadBack)
     {
-        //TODO: better exception handling
+        // TODO: better exception handling
         if (!m_devInfo.SupportsOneSweep)
             printf("Warning this device does not support Sweep family sorting, correct execution is not guarunteed");
     }
 
     ~SweepBase()
     {
+    }
+
+    void UpdateSize(uint32_t size) override
+    {
+        if (m_numKeys != size)
+        {
+            m_numKeys = size;
+            m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
+            m_globalHistPartitions = divRoundUp(m_numKeys, k_globalHistPartitionSize);
+            DisposeBuffers();
+            InitBuffers(m_numKeys, m_partitions);
+        }
     }
 
     bool TestAll() override
@@ -138,24 +146,24 @@ public:
         printf("\n");
         printf("%u / %u passed. \n", sortPayloadTestsPassed, k_tuningParameters.partitionSize + 1);
 
-        //Validate the multi-dispatching approach to handle large inputs.
-        //This has extremely large memory requirements. So we check to make
-        //sure we can do it.
+        // Validate the multi-dispatching approach to handle large inputs.
+        // This has extremely large memory requirements. So we check to make
+        // sure we can do it.
         printf("Beginning large size tests\n");
         sortPayloadTestsPassed += ValidateSort(1 << 21, 5);
         sortPayloadTestsPassed += ValidateSort(1 << 22, 7);
         sortPayloadTestsPassed += ValidateSort(1 << 23, 11);
 
         uint64_t totalAvailableMemory = m_devInfo.dedicatedVideoMemory + m_devInfo.sharedSystemMemory;
-        uint32_t maxDimTestSize = k_maxDispatchDimension * k_tuningParameters.partitionSize;    //does not exceed u32 for all tuning paramters.
+        uint32_t maxDimTestSize = k_maxDispatchDimension * k_tuningParameters.partitionSize; // does not exceed u32 for all tuning paramters.
 
         uint64_t staticMemoryRequirements =
-            ((uint64_t)k_radix * k_radixPasses * sizeof(uint32_t)) +    //This is the global histogram
-            (sizeof(uint32_t)) +                                        //The error buffer
-            k_maxReadBack * sizeof(uint32_t);                           //The readback buffer
+            ((uint64_t)k_radix * k_radixPasses * sizeof(uint32_t)) + // This is the global histogram
+            (sizeof(uint32_t)) +                                     // The error buffer
+            k_maxReadBack * sizeof(uint32_t);                        // The readback buffer
 
-        //Multiply by 4 for sort, payload, alt, alt payload, add 1
-        //in case fragmentation of the memory causes issues when spilling into shared system memory. 
+        // Multiply by 4 for sort, payload, alt, alt payload, add 1
+        // in case fragmentation of the memory causes issues when spilling into shared system memory.
         uint64_t pairsMemoryRequirements =
             ((uint64_t)k_maxDispatchDimension * k_tuningParameters.partitionSize * sizeof(uint32_t) * 5) +
             staticMemoryRequirements +
@@ -187,18 +195,6 @@ public:
     }
 
 protected:
-    void UpdateSize(uint32_t size) override
-    {
-        if (m_numKeys != size)
-        {
-            m_numKeys = size;
-            m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
-            m_globalHistPartitions = divRoundUp(m_numKeys, k_globalHistPartitionSize);
-            DisposeBuffers();
-            InitBuffers(m_numKeys, m_partitions);
-        }
-    }
-
     void DisposeBuffers() override
     {
         if (!m_userProvidedSortBuffer)
@@ -247,18 +243,18 @@ protected:
     {
         if (!m_userProvidedSortBuffer)
             m_sortBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         if (!m_userProvidedAltBuffer)
             m_altBuffer = CreateBuffer(
-            m_device,
-            numKeys * sizeof(uint32_t),
-            D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_STATE_COMMON,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                m_device,
+                numKeys * sizeof(uint32_t),
+                D3D12_HEAP_TYPE_DEFAULT,
+                D3D12_RESOURCE_STATE_COMMON,
+                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         m_passHistBuffer = CreateBuffer(
             m_device,
@@ -271,42 +267,47 @@ protected:
         {
             if (!m_userProvidedSortPayloadBuffer)
                 m_sortPayloadBuffer = CreateBuffer(
-                m_device,
-                numKeys * sizeof(uint32_t),
-                D3D12_HEAP_TYPE_DEFAULT,
-                D3D12_RESOURCE_STATE_COMMON,
-                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                    m_device,
+                    numKeys * sizeof(uint32_t),
+                    D3D12_HEAP_TYPE_DEFAULT,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
             if (!m_userProvidedAltPayloadBuffer)
                 m_altPayloadBuffer = CreateBuffer(
-                m_device,
-                numKeys * sizeof(uint32_t),
-                D3D12_HEAP_TYPE_DEFAULT,
-                D3D12_RESOURCE_STATE_COMMON,
-                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                    m_device,
+                    numKeys * sizeof(uint32_t),
+                    D3D12_HEAP_TYPE_DEFAULT,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         }
         else
         {
             if (!m_userProvidedSortPayloadBuffer)
                 m_sortPayloadBuffer = CreateBuffer(
-                m_device,
-                1 * sizeof(uint32_t),
-                D3D12_HEAP_TYPE_DEFAULT,
-                D3D12_RESOURCE_STATE_COMMON,
-                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                    m_device,
+                    1 * sizeof(uint32_t),
+                    D3D12_HEAP_TYPE_DEFAULT,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
             if (!m_userProvidedAltPayloadBuffer)
                 m_altPayloadBuffer = CreateBuffer(
-                m_device,
-                1 * sizeof(uint32_t),
-                D3D12_HEAP_TYPE_DEFAULT,
-                D3D12_RESOURCE_STATE_COMMON,
-                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                    m_device,
+                    1 * sizeof(uint32_t),
+                    D3D12_HEAP_TYPE_DEFAULT,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         }
     }
 
     void PrepareSortCmdList() override
     {
+        assert(m_initSweep && "m_initSweep is not initialized");
+        assert(m_globalHist && "m_globalHist is not initialized");
+        assert(m_scan && "m_scan is not initialized");
+        assert(m_digitPass && "m_digitPass is not initialized");
+
         m_initSweep->Dispatch(
             m_cmdList,
             m_globalHistBuffer->GetGPUVirtualAddress(),

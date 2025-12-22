@@ -4,16 +4,6 @@
 
 namespace SimulationKernels
 {
-    // Root signature parameter indices for HashToIndex
-    // Matches registers in shaders/HashToIndex.hlsl
-    enum class HashToIndexReg
-    {
-        Params = 0,     // b0
-        Hashes = 3,     // t3
-        CellStart = 10, // u10
-        CellEnd = 11    // u11
-    };
-
     /**
      * @brief Hash To Index Kernel
      * Finds the starting index for each cell by detecting hash transitions.
@@ -59,10 +49,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &cellEnd)
         {
             SetPipelineState(cmdList);
-            // Caller should bind SimParams CBV at root 0 via SetComputeRootConstantBufferView
-            cmdList->SetComputeRootShaderResourceView(1, hashes);
-            cmdList->SetComputeRootUnorderedAccessView(2, cellStart);
-            cmdList->SetComputeRootUnorderedAccessView(3, cellEnd);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

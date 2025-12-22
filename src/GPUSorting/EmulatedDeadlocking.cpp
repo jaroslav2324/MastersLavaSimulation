@@ -53,7 +53,7 @@ EmulatedDeadlocking::~EmulatedDeadlocking()
 
 void EmulatedDeadlocking::InitComputeShaders()
 {
-    const std::filesystem::path path = "Shaders/EmulatedDeadlocking.hlsl";
+    const std::filesystem::path path = "shaders/sort/EmulatedDeadlocking.hlsl";
     m_initSweep = new SweepCommonKernels::InitSweep(m_device, m_devInfo, m_compileArguments, path);
     m_globalHist = new SweepCommonKernels::GlobalHist(m_device, m_devInfo, m_compileArguments, path);
     m_scan = new SweepCommonKernels::Scan(m_device, m_devInfo, m_compileArguments, path);

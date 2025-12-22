@@ -4,18 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class HeatTransferReg
-    {
-        Params = 0,        // b0
-        Predicted = 1,     // t1
-        SortedIndices = 4, // t4
-        CellStart = 5,     // t5
-        CellEnd = 6,       // t6
-        Temperature = 7,   // t7
-        Density = 8,       // t8
-        TemperatureOut = 6 // u6
-    };
-
     class HeatTransfer : public SimulationComputeKernelBase
     {
     public:
@@ -45,13 +33,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &temperatureOut)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootShaderResourceView(1, predicted);
-            cmdList->SetComputeRootShaderResourceView(2, sortedIndices);
-            cmdList->SetComputeRootShaderResourceView(3, cellStart);
-            cmdList->SetComputeRootShaderResourceView(4, cellEnd);
-            cmdList->SetComputeRootShaderResourceView(5, temperature);
-            cmdList->SetComputeRootShaderResourceView(6, density);
-            cmdList->SetComputeRootUnorderedAccessView(7, temperatureOut);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

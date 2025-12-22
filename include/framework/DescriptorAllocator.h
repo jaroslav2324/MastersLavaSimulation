@@ -42,6 +42,15 @@ public:
         return m_allocated++;
     }
 
+    /// Allocates a contiguous range of descriptors and returns the start index
+    UINT AllocRange(UINT count)
+    {
+        assert(m_allocated + count <= m_capacity);
+        UINT start = m_allocated;
+        m_allocated += count;
+        return start;
+    }
+
     D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(UINT index) const
     {
         return {

@@ -228,18 +228,24 @@ void SimulationSystem::CreateSimulationKernels()
         devicePtr, devInfo, compileArgs, shaderBase / L"CollisionProjection.hlsl", m_rootSignature);
 
     m_oneSweep = std::make_unique<OneSweep>(devicePtr, devInfo, GPUSorting::ORDER_ASCENDING, GPUSorting::KEY_UINT32, GPUSorting::PAYLOAD_UINT32);
+    m_oneSweep->SetAllBuffers(
+        sortBuffers.hashBuffers[0]->resource,
+        sortBuffers.indexBuffers[0]->resource,
+        sortBuffers.hashBuffers[1]->resource,
+        sortBuffers.indexBuffers[1]->resource,
+        true);
+    m_oneSweep->UpdateSize(m_maxParticlesCount);
 }
 
 // TODO: move to some utility file
 inline std::shared_ptr<StructuredBuffer>
 CreateBuffer(
     ID3D12Device *device,
-    DescriptorAllocator &alloc,
     UINT count,
     UINT stride)
 {
     auto buf = std::make_shared<StructuredBuffer>();
-    buf->Init(device, count, stride, alloc);
+    buf->Init(device, count, stride);
     return buf;
 }
 
@@ -249,86 +255,135 @@ void SimulationSystem::InitSimulationBuffers(
     UINT numParticles,
     UINT numCells)
 {
+    // Reserve descriptor table ranges that match the root signature
+    // SRV table: 12 entries (t0..t11)
+    // UAV table: 14 entries (u0..u13)
+    m_srvBase = alloc.AllocRange(12);
+    m_uavBase = alloc.AllocRange(14);
+
+    // Create resources (no descriptors yet)
     for (int i = 0; i < 2; ++i)
     {
         particleSwapBuffers.position[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(DirectX::SimpleMath::Vector3));
 
         particleSwapBuffers.predictedPosition[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(DirectX::SimpleMath::Vector3));
 
         particleSwapBuffers.velocity[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(DirectX::SimpleMath::Vector3));
 
         particleSwapBuffers.temperature[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(float));
     }
 
     particleScratchBuffers.density = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(float));
 
     particleScratchBuffers.constraintC = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(float));
 
     particleScratchBuffers.lambda = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(float));
 
     particleScratchBuffers.deltaP = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(DirectX::SimpleMath::Vector3));
 
     particleScratchBuffers.viscosityMu = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(float));
 
     particleScratchBuffers.viscosityCoeff = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(float));
 
     particleScratchBuffers.cellStart = CreateBuffer(
-        device, alloc,
+        device,
         numCells,
         sizeof(uint32_t));
 
     particleScratchBuffers.cellEnd = CreateBuffer(
-        device, alloc,
+        device,
         numCells,
         sizeof(uint32_t));
 
     particleScratchBuffers.phase = CreateBuffer(
-        device, alloc,
+        device,
         numParticles,
         sizeof(uint32_t));
 
     for (int i = 0; i < 2; ++i)
     {
         sortBuffers.hashBuffers[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(uint32_t));
 
         sortBuffers.indexBuffers[i] = CreateBuffer(
-            device, alloc,
+            device,
             numParticles,
             sizeof(uint32_t));
     }
+
+    // Create SRV/UAV descriptors using the reserved ranges.
+    // We'll fill SRV slots (0..11) and UAV slots (0..13) with the most-used buffers.
+    particleSwapBuffers.position[0]->CreateSRV(device, alloc, m_srvBase + 0);
+    particleSwapBuffers.position[0]->CreateUAV(device, alloc, m_uavBase + 0);
+
+    particleSwapBuffers.predictedPosition[0]->CreateSRV(device, alloc, m_srvBase + 1);
+    particleSwapBuffers.predictedPosition[0]->CreateUAV(device, alloc, m_uavBase + 1);
+
+    particleSwapBuffers.velocity[0]->CreateSRV(device, alloc, m_srvBase + 2);
+    particleSwapBuffers.velocity[0]->CreateUAV(device, alloc, m_uavBase + 2);
+
+    particleSwapBuffers.temperature[0]->CreateSRV(device, alloc, m_srvBase + 3);
+    particleSwapBuffers.temperature[0]->CreateUAV(device, alloc, m_uavBase + 3);
+
+    particleSwapBuffers.position[1]->CreateSRV(device, alloc, m_srvBase + 4);
+    particleSwapBuffers.position[1]->CreateUAV(device, alloc, m_uavBase + 4);
+
+    particleSwapBuffers.predictedPosition[1]->CreateSRV(device, alloc, m_srvBase + 5);
+    particleSwapBuffers.predictedPosition[1]->CreateUAV(device, alloc, m_uavBase + 5);
+
+    particleSwapBuffers.velocity[1]->CreateSRV(device, alloc, m_srvBase + 6);
+    particleSwapBuffers.velocity[1]->CreateUAV(device, alloc, m_uavBase + 6);
+
+    particleSwapBuffers.temperature[1]->CreateSRV(device, alloc, m_srvBase + 7);
+    particleSwapBuffers.temperature[1]->CreateUAV(device, alloc, m_uavBase + 7);
+
+    particleScratchBuffers.density->CreateSRV(device, alloc, m_srvBase + 8);
+    particleScratchBuffers.density->CreateUAV(device, alloc, m_uavBase + 8);
+
+    particleScratchBuffers.constraintC->CreateSRV(device, alloc, m_srvBase + 9);
+    particleScratchBuffers.constraintC->CreateUAV(device, alloc, m_uavBase + 9);
+
+    particleScratchBuffers.lambda->CreateSRV(device, alloc, m_srvBase + 10);
+    particleScratchBuffers.lambda->CreateUAV(device, alloc, m_uavBase + 10);
+
+    particleScratchBuffers.deltaP->CreateSRV(device, alloc, m_srvBase + 11);
+    particleScratchBuffers.deltaP->CreateUAV(device, alloc, m_uavBase + 11);
+
+    // Additional UAV-only slots for viscosity buffers
+    particleScratchBuffers.viscosityMu->CreateUAV(device, alloc, m_uavBase + 12);
+    particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + 13);
 }
 
 void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
@@ -394,6 +449,8 @@ void SimulationSystem::Simulate(float dt)
 
     cmdList->SetComputeRootSignature(m_rootSignature.get());
 
+    cmdList->SetComputeRootDescriptorTable(0, alloc->GetGpuHandle(m_srvBase));
+    cmdList->SetComputeRootDescriptorTable(1, alloc->GetGpuHandle(m_uavBase));
     cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
 
     const uint32_t numParticles = static_cast<uint32_t>(m_simParams.numParticles);
@@ -441,16 +498,8 @@ void SimulationSystem::Simulate(float dt)
     }
 
     // 4) Configure OneSweep to use our hash/index buffers and sort
-    // if (m_oneSweep)
-    // {
-    m_oneSweep->SetAllBuffers(
-        sortBuffers.hashBuffers[0]->resource,
-        sortBuffers.indexBuffers[0]->resource,
-        sortBuffers.hashBuffers[1]->resource,
-        sortBuffers.indexBuffers[1]->resource,
-        true);
+
     m_oneSweep->Sort();
-    //}
 
     // After sorting, hashes and indices are in sortBuffers.hashBuffers[0] and sortBuffers.indexBuffers[0]
 
@@ -458,7 +507,12 @@ void SimulationSystem::Simulate(float dt)
     ThrowIfFailed(cmdAlloc->Reset());
     ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
     cmdList->SetDescriptorHeaps(1, heaps);
-    cmdList->SetComputeRootConstantBufferView(0, m_simParamsUpload->GetGPUVirtualAddress());
+
+    cmdList->SetComputeRootSignature(m_rootSignature.get());
+
+    cmdList->SetComputeRootDescriptorTable(0, alloc->GetGpuHandle(m_srvBase));
+    cmdList->SetComputeRootDescriptorTable(1, alloc->GetGpuHandle(m_uavBase));
+    cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
 
     // 5) (hash->cell start)
     m_hashToIndex->Dispatch(cmdList, numParticles,

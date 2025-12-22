@@ -65,6 +65,10 @@ private:
 
     inline static ID3D12DescriptorHeap *m_uavHeap = nullptr;
 
+    // reserved descriptor table bases
+    inline static UINT m_srvBase = 0;
+    inline static UINT m_uavBase = 0;
+
     const static int m_gridCellsCount = 256;
     const static int m_maxParticlesCount = 1 << 10; // TODO: move to params?
     inline static unsigned int m_currentSwapIndex = 0;

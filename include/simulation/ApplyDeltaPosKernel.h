@@ -4,13 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class ApplyDeltaPosReg
-    {
-        Params = 0,      // b0
-        PredictedRW = 0, // u0
-        DeltaP = 2       // u2
-    };
-
     class ApplyDeltaPos : public SimulationComputeKernelBase
     {
     public:
@@ -35,8 +28,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &deltaP)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootUnorderedAccessView(1, predictedRW);
-            cmdList->SetComputeRootUnorderedAccessView(2, deltaP);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

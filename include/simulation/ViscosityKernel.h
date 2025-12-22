@@ -4,14 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class ViscosityReg
-    {
-        Params = 0,       // b0
-        Temperature = 7,  // t7
-        MuOut = 7,        // u7
-        ViscCoeffOut = 13 // u13
-    };
-
     class Viscosity : public SimulationComputeKernelBase
     {
     public:
@@ -37,9 +29,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &viscCoeffOut)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootShaderResourceView(1, temperatureIn);
-            cmdList->SetComputeRootUnorderedAccessView(2, muOut);
-            cmdList->SetComputeRootUnorderedAccessView(3, viscCoeffOut);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

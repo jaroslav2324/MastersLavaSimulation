@@ -137,7 +137,7 @@ bool DeviceRadixSort::TestAll()
 
 void DeviceRadixSort::InitUtilityComputeShaders()
 {
-    const std::filesystem::path path = "Shaders/Utility.hlsl";
+    const std::filesystem::path path = "shaders/sort/Utility.hlsl";
     m_initSortInput = new UtilityKernels::InitSortInput(m_device, m_devInfo, m_compileArguments, path);
     m_clearErrorCount = new UtilityKernels::ClearErrorCount(m_device, m_devInfo, m_compileArguments, path);
     m_validate = new UtilityKernels::Validate(m_device, m_devInfo, m_compileArguments, path);
@@ -146,7 +146,7 @@ void DeviceRadixSort::InitUtilityComputeShaders()
 
 void DeviceRadixSort::InitComputeShaders()
 {
-    const std::filesystem::path path = "Shaders/DeviceRadixSort.hlsl";
+    const std::filesystem::path path = "shaders/sort/DeviceRadixSort.hlsl";
     m_initDeviceRadix = new DeviceRadixSortKernels::InitDeviceRadixSort(m_device, m_devInfo, m_compileArguments, path);
     m_upsweep = new DeviceRadixSortKernels::Upsweep(m_device, m_devInfo, m_compileArguments, path);
     m_scan = new DeviceRadixSortKernels::Scan(m_device, m_devInfo, m_compileArguments, path);

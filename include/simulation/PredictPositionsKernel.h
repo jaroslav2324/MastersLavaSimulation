@@ -4,17 +4,6 @@
 
 namespace SimulationKernels
 {
-    // Root signature parameter indices for PredictPositions
-    // Matches registers in shaders/PredictPositions.hlsl
-    enum class PredictPositionsReg
-    {
-        Params = 0,                // b0
-        PositionsSrc = 0,          // t0
-        VelocitySrc = 2,           // t2
-        PredictedPositionsDst = 0, // u0
-        VelocityDst = 1            // u1
-    };
-
     /**
      * @brief Predict Positions Kernel
      * Applies external forces (gravity) and predicts new particle positions.
@@ -58,11 +47,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &velocityDst)
         {
             SetPipelineState(cmdList);
-            // Caller must bind SimParams CBV at root 0 via SetComputeRootConstantBufferView
-            cmdList->SetComputeRootShaderResourceView(1, positionsSrc);
-            cmdList->SetComputeRootShaderResourceView(2, velocitySrc);
-            cmdList->SetComputeRootUnorderedAccessView(3, predictedPositionsDst);
-            cmdList->SetComputeRootUnorderedAccessView(4, velocityDst);
 
             uint32_t threadGroups = (particleCount + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

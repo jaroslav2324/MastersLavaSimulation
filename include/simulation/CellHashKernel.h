@@ -4,15 +4,6 @@
 
 namespace SimulationKernels
 {
-    // Root signature parameter indices for Hash
-    enum class SpatialHashReg
-    {
-        Params = 0,
-        PositionBuffer = 1,
-        HashBuffer = 2,
-        IndexBuffer = 3,
-    };
-
     /**
      * @brief Hash Kernel
      * Computes cell hash for each particle position and outputs hash/index pairs.
@@ -56,12 +47,7 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &indexBuffer)
         {
             SetPipelineState(cmdList);
-            // !!! Caller must bind SimParams CBV at root 0
-            cmdList->SetComputeRootShaderResourceView(1, positionBuffer);
-            cmdList->SetComputeRootUnorderedAccessView(2, hashBuffer);
-            cmdList->SetComputeRootUnorderedAccessView(3, indexBuffer);
 
-            // Dispatch in groups of 256 threads
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
         }

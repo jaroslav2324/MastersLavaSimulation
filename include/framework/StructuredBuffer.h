@@ -13,8 +13,7 @@ struct StructuredBuffer
 
     void Init(ID3D12Device *device,
               UINT count,
-              UINT stride,
-              DescriptorAllocator &alloc)
+              UINT stride)
     {
         elementCount = count;
         elementStride = stride;
@@ -29,29 +28,39 @@ struct StructuredBuffer
             D3D12_RESOURCE_STATE_COMMON, nullptr,
             IID_PPV_ARGS(resource.put()));
 
-        // SRV
-        srvIndex = alloc.Alloc();
+        // Views will be created externally via CreateViews()
+        srvIndex = UINT_MAX;
+        uavIndex = UINT_MAX;
+    }
+
+    void CreateViews(ID3D12Device *device, DescriptorAllocator &alloc, UINT srvIdx, UINT uavIdx)
+    {
+        CreateSRV(device, alloc, srvIdx);
+        CreateUAV(device, alloc, uavIdx);
+    }
+
+    void CreateSRV(ID3D12Device *device, DescriptorAllocator &alloc, UINT srvIdx)
+    {
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srv.Format = DXGI_FORMAT_UNKNOWN;
         srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
         srv.Buffer.FirstElement = 0;
-        srv.Buffer.NumElements = count;
-        srv.Buffer.StructureByteStride = stride;
+        srv.Buffer.NumElements = elementCount;
+        srv.Buffer.StructureByteStride = elementStride;
+        device->CreateShaderResourceView(resource.get(), &srv, alloc.GetCpuHandle(srvIdx));
+        srvIndex = srvIdx;
+    }
 
-        device->CreateShaderResourceView(
-            resource.get(), &srv, alloc.GetCpuHandle(srvIndex));
-
-        // UAV
-        uavIndex = alloc.Alloc();
+    void CreateUAV(ID3D12Device *device, DescriptorAllocator &alloc, UINT uavIdx)
+    {
         D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
         uav.Format = DXGI_FORMAT_UNKNOWN;
         uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
         uav.Buffer.FirstElement = 0;
-        uav.Buffer.NumElements = count;
-        uav.Buffer.StructureByteStride = stride;
-
-        device->CreateUnorderedAccessView(
-            resource.get(), nullptr, &uav, alloc.GetCpuHandle(uavIndex));
+        uav.Buffer.NumElements = elementCount;
+        uav.Buffer.StructureByteStride = elementStride;
+        device->CreateUnorderedAccessView(resource.get(), nullptr, &uav, alloc.GetCpuHandle(uavIdx));
+        uavIndex = uavIdx;
     }
 };

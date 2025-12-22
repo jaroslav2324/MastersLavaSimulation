@@ -4,15 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class UpdatePositionVelocityReg
-    {
-        Params = 0,        // b0
-        OldPositions = 0,  // t0
-        PositionsOut = 12, // u12
-        Predicted = 0,     // u0
-        Velocities = 1     // u1
-    };
-
     class UpdatePositionVelocity : public SimulationComputeKernelBase
     {
     public:
@@ -39,10 +30,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &velocities)
         {
             SetPipelineState(cmdList);
-            cmdList->SetComputeRootShaderResourceView(1, oldPositions);
-            cmdList->SetComputeRootUnorderedAccessView(2, positionsOut);
-            cmdList->SetComputeRootUnorderedAccessView(3, predicted);
-            cmdList->SetComputeRootUnorderedAccessView(4, velocities);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);

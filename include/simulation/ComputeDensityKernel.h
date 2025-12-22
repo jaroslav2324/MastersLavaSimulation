@@ -4,17 +4,6 @@
 
 namespace SimulationKernels
 {
-    enum class ComputeDensityReg
-    {
-        Params = 0,        // b0
-        Predicted = 1,     // t1
-        SortedIndices = 4, // t4
-        CellStart = 5,     // t5
-        CellEnd = 6,       // t6
-        DensityOut = 3,    // u3
-        ConstraintOut = 4  // u4
-    };
-
     class ComputeDensity : public SimulationComputeKernelBase
     {
     public:
@@ -43,13 +32,6 @@ namespace SimulationKernels
             const D3D12_GPU_VIRTUAL_ADDRESS &constraintOut)
         {
             SetPipelineState(cmdList);
-            // Caller binds SimParams CBV at root 0
-            cmdList->SetComputeRootShaderResourceView(1, predictedPositions);
-            cmdList->SetComputeRootShaderResourceView(2, sortedIndices);
-            cmdList->SetComputeRootShaderResourceView(3, cellStart);
-            cmdList->SetComputeRootShaderResourceView(4, cellEnd);
-            cmdList->SetComputeRootUnorderedAccessView(5, densityOut);
-            cmdList->SetComputeRootUnorderedAccessView(6, constraintOut);
 
             uint32_t threadGroups = (numParticles + 255) / 256;
             cmdList->Dispatch(threadGroups, 1, 1);
