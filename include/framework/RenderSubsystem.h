@@ -29,6 +29,9 @@ public:
 	// Access the main command queue for uploads/compute dispatches
 	static ID3D12CommandQueue *GetCommandQueue();
 
+	// TODO: move somewhere else
+	// Wait helper: signals the provided fence with the given value and waits for completion
+	static void WaitForFence(ID3D12Fence *fence, uint64_t fenceValue);
 	static GPUSorting::DeviceInfo GetDeviceInfo() { return g_deviceInfo; };
 	static std::shared_ptr<DescriptorAllocator> GetCBVSRVUAVAllocator() { return m_cbvSrvUavAllocator; };
 	static winrt::com_ptr<ID3D12Device> GetDevice();

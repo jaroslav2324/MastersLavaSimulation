@@ -3,10 +3,10 @@
 #include "pch.h"
 #include "Particle.h"
 
+
 #include "GPUSorting/GPUSorting.h"
 #include "GPUSorting/OneSweep.h"
 
-// simulation kernels
 #include "simulation/PredictPositionsKernel.h"
 #include "simulation/CellHashKernel.h"
 #include "simulation/HashToIndexKernel.h"
@@ -32,21 +32,21 @@ public:
     }
 
     static void Simulate(float dt);
-    // Return GPU descriptor handle to current particle positions SRV
+
     static D3D12_GPU_DESCRIPTOR_HANDLE GetPositionBufferSRV();
     static D3D12_GPU_DESCRIPTOR_HANDLE GetTemperatureBufferSRV();
     static uint32_t GetNumParticles() { return m_simParams.numParticles; }
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
+    static void CreateSimulationKernels();
     static void InitSimulationBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles, UINT numCells);
+    static void InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
 
-    // Simulation parameters stored on CPU and uploaded to GPU CBV
     inline static SimParams m_simParams = {};
     inline static winrt::com_ptr<ID3D12Resource> m_simParamsUpload = nullptr;
     inline static UINT m_simParamsCBV = UINT_MAX;
 
-    // Simulation kernels
     inline static std::unique_ptr<SimulationKernels::PredictPositions> m_predictPositions = nullptr;
     inline static std::unique_ptr<SimulationKernels::CellHash> m_cellHash = nullptr;
     inline static std::unique_ptr<SimulationKernels::HashToIndex> m_hashToIndex = nullptr;
@@ -66,7 +66,7 @@ private:
     inline static ID3D12DescriptorHeap *m_uavHeap = nullptr;
 
     const static int m_gridCellsCount = 256;
-    const static int m_maxParticlesCount = 1 << 10;
+    const static int m_maxParticlesCount = 1 << 10; // TODO: move to params?
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;

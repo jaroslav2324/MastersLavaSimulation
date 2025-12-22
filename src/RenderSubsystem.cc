@@ -2,6 +2,7 @@
 
 #include "framework/ShaderCompiler.h"
 #include "framework/RenderTemplatesAPI.h"
+#include "framework/SimulationSystem.h"
 
 ID3D12CommandQueue *RenderSubsystem::GetCommandQueue()
 {
@@ -50,8 +51,6 @@ void RenderSubsystem::Init()
     m_commandList->Close();
     ID3D12CommandList *ppCommandLists[] = {m_commandList.get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
-
-    // SimulationSystem::Init(m_device.get());
 }
 
 void RenderSubsystem::CreateGlobalConstantBuffer()
@@ -186,6 +185,20 @@ void RenderSubsystem::CreateFence()
     HRESULT hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put()));
     if (FAILED(hr))
         throw std::runtime_error("Failed to create fence.");
+}
+
+void RenderSubsystem::WaitForFence(ID3D12Fence *fence, uint64_t fenceValue)
+{
+    auto queue = GetCommandQueue();
+    queue->Signal(fence, fenceValue);
+
+    if (fence->GetCompletedValue() < fenceValue)
+    {
+        HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        fence->SetEventOnCompletion(fenceValue, eventHandle);
+        WaitForSingleObject(eventHandle, INFINITE);
+        CloseHandle(eventHandle);
+    }
 }
 
 void RenderSubsystem::GetDescriptorSizes()

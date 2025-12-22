@@ -2,6 +2,7 @@
 #include "framework/RenderTemplatesAPI.h"
 #include "framework/ShaderCompiler.h"
 #include "framework/RenderSubsystem.h"
+#include "framework/UploadHelpers.h"
 #include "GPUSorting/OneSweep.h"
 
 #pragma region INIT
@@ -11,41 +12,21 @@ void SimulationSystem::Init(ID3D12Device *device)
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
     InitSimulationBuffers(device, *alloc, m_maxParticlesCount, m_gridCellsCount);
 
-    // create root signature used by simulation kernels
     CreateSimulationRootSignature(device);
 
-    // --- create constant buffer (upload heap) for SimParams ---
-    // prepare default sim params
-    m_simParams.h = 0.05f;
+    // fill some default parameters
     m_simParams.h2 = m_simParams.h * m_simParams.h;
-    m_simParams.rho0 = 2800.0f;
-    m_simParams.mass = 1.0f;
-    m_simParams.eps = 1e-6f;
     m_simParams.dt = 1.0f / 60.0f;
     m_simParams.epsHeatTransfer = 0.01f * m_simParams.h * m_simParams.h;
     m_simParams.cellSize = m_simParams.h;
-    m_simParams.qViscosity = 0.1f; // TODO: check
-    m_simParams.worldOrigin = DirectX::SimpleMath::Vector3(-0.5f, -0.5f, -0.5f);
-    m_simParams.numParticles = 0; // will set after particle generation
     // grid resolution: cubic approximation
     int gridRes = std::max(1, (int)std::round(std::cbrt((double)m_gridCellsCount)));
     m_simParams.gridResolution[0] = gridRes;
     m_simParams.gridResolution[1] = gridRes;
     m_simParams.gridResolution[2] = gridRes;
-    m_simParams.velocityDamping = 1.0f;
-    m_simParams.gravityVec = DirectX::SimpleMath::Vector3(0.0f, -9.81f, 0.0f);
-    m_simParams.yViscosity = 1.0f;
-    m_simParams.gammaViscosity = 1.0f;
-    m_simParams.TminViscosity = 1e-3f;
-    m_simParams.expClampMinViscosity = -80.0f;
-    m_simParams.expClampMaxViscosity = 80.0f;
-    m_simParams.muMinViscosity = 0.0f;
-    m_simParams.muMaxViscosity = 10.0f;
-    m_simParams.muNormMaxViscosity = 1.0f;
 
-    // create upload resource for constant buffer (256-byte aligned)
     const UINT64 cbSizeUnaligned = sizeof(SimParams);
-    const UINT64 cbSize = (cbSizeUnaligned + 255) & ~255ULL;
+    const UINT64 cbSize = Align256(cbSizeUnaligned);
 
     CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
     CD3DX12_RESOURCE_DESC bufDesc = CD3DX12_RESOURCE_DESC::Buffer(cbSize);
@@ -71,52 +52,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     cbvDesc.SizeInBytes = static_cast<UINT>(cbSize);
     device->CreateConstantBufferView(&cbvDesc, alloc->GetCpuHandle(m_simParamsCBV));
 
-    // create simulation kernels
-    GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
-    std::vector<std::wstring> compileArgs;
-    auto devicePtr = RenderSubsystem::GetDevice();
-    std::filesystem::path shaderBase = L"shaders/simulation";
-
-    m_predictPositions = std::make_unique<SimulationKernels::PredictPositions>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"PredictPositions.hlsl", m_rootSignature);
-
-    m_cellHash = std::make_unique<SimulationKernels::CellHash>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"CellHash.hlsl", m_rootSignature);
-
-    m_hashToIndex = std::make_unique<SimulationKernels::HashToIndex>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"HashToIndex.hlsl", m_rootSignature);
-
-    m_computeDensity = std::make_unique<SimulationKernels::ComputeDensity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDensity.hlsl", m_rootSignature);
-
-    m_computeLambda = std::make_unique<SimulationKernels::ComputeLambda>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeLambda.hlsl", m_rootSignature);
-
-    m_computeDeltaPos = std::make_unique<SimulationKernels::ComputeDeltaPos>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDeltaPos.hlsl", m_rootSignature);
-
-    m_applyDeltaPos = std::make_unique<SimulationKernels::ApplyDeltaPos>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyDeltaPos.hlsl", m_rootSignature);
-
-    m_updatePosVel = std::make_unique<SimulationKernels::UpdatePositionVelocity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"UpdatePositionVelocity.hlsl", m_rootSignature);
-
-    m_viscosity = std::make_unique<SimulationKernels::Viscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"Viscosity.hlsl", m_rootSignature);
-
-    m_applyViscosity = std::make_unique<SimulationKernels::ApplyViscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyViscosity.hlsl", m_rootSignature);
-
-    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"HeatTransfer.hlsl", m_rootSignature);
-
-    m_collisionProjection = std::make_unique<SimulationKernels::CollisionProjection>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"CollisionProjection.hlsl", m_rootSignature);
-
-    // instantiate OneSweep sorter (keys = hash, payload = particle index)
-    m_oneSweep = std::make_unique<OneSweep>(devicePtr, devInfo, GPUSorting::ORDER_ASCENDING, GPUSorting::KEY_UINT32, GPUSorting::PAYLOAD_UINT32);
-
-    m_simParams.numParticles = m_maxParticlesCount;
+    CreateSimulationKernels();
 
     // grid dimensions
     uint32_t dim = static_cast<uint32_t>(std::ceil(std::pow((double)m_maxParticlesCount, 1.0 / 3.0)));
@@ -136,87 +72,54 @@ void SimulationSystem::Init(ID3D12Device *device)
         }
     }
 
-    // create upload buffer
+    // create upload buffer and copy positions into GPU position buffers using one command list
     UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
-    CD3DX12_RESOURCE_DESC uploadDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadSize);
-    winrt::com_ptr<ID3D12Resource> uploadResource;
-    ThrowIfFailed(device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &uploadDesc,
-                                                  D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(uploadResource.put())));
+    auto uploadResource = UploadHelpers::CreateUploadBuffer(device, uploadSize);
 
-    // copy data to upload
+    // copy data to upload resource
     void *pUpload = nullptr;
     ThrowIfFailed(uploadResource->Map(0, &readRange, &pUpload));
     memcpy(pUpload, hostPositions.data(), (size_t)uploadSize);
     uploadResource->Unmap(0, nullptr);
 
-    // prepare temp command allocator/list to perform GPU copy
-    winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
-    winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
-    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
-    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
+    // prepare single command allocator/list to perform GPU copies for both swap buffers
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
+    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.GetAddressOf())));
+    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(cmdList.GetAddressOf())));
 
-    // transition destination to COPY_DEST
-    auto dstRes = particleSwapBuffers.position[0]->resource.get();
-    CD3DX12_RESOURCE_BARRIER toCopy = CD3DX12_RESOURCE_BARRIER::Transition(dstRes, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-    cmdList->ResourceBarrier(1, &toCopy);
+    // copy into first swap buffer (COMMON -> COPY -> UAV)
+    UploadHelpers::CopyBufferToResource(
+        cmdList.Get(),
+        uploadResource.Get(),
+        particleSwapBuffers.position[0]->resource.Get(),
+        uploadSize,
+        D3D12_RESOURCE_STATE_COMMON,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    // copy
-    cmdList->CopyBufferRegion(dstRes, 0, uploadResource.get(), 0, uploadSize);
-
-    // transition to UAV for compute use
-    CD3DX12_RESOURCE_BARRIER toUAV = CD3DX12_RESOURCE_BARRIER::Transition(dstRes, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    cmdList->ResourceBarrier(1, &toUAV);
+    // copy into second swap buffer (COMMON -> COPY -> UAV)
+    UploadHelpers::CopyBufferToResource(
+        cmdList.Get(),
+        uploadResource.Get(),
+        particleSwapBuffers.position[1]->resource.Get(),
+        uploadSize,
+        D3D12_RESOURCE_STATE_COMMON,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ThrowIfFailed(cmdList->Close());
-
-    ID3D12CommandList *lists[] = {cmdList.get()};
+    ID3D12CommandList *lists[] = {cmdList.Get()};
     auto queue = RenderSubsystem::GetCommandQueue();
     queue->ExecuteCommandLists(1, lists);
 
-    // wait for completion
-    winrt::com_ptr<ID3D12Fence> fence;
-    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+    // create a fence and wait once for the uploads to complete
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())));
     uint64_t fenceVal = 1;
-    queue->Signal(fence.get(), fenceVal);
-    if (fence->GetCompletedValue() < fenceVal)
-    {
-        HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        fence->SetEventOnCompletion(fenceVal, ev);
-        WaitForSingleObject(ev, INFINITE);
-        CloseHandle(ev);
-    }
+    RenderSubsystem::WaitForFence(fence.Get(), fenceVal);
 
-    // free upload resource (will release on function exit)
+    InitSortIndexBuffers(device, *alloc, m_maxParticlesCount);
 
-    // TODO: what for?
-    // duplicate positions into second swap buffer so both contain valid data
-    // (simple copy on CPU to GPU would be similar; here we re-use the same upload resource)
-    // For brevity we copy the same data into the second buffer via another command list
-    // create second command list
-    ThrowIfFailed(cmdAlloc->Reset());
-    ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
-    auto dstRes1 = particleSwapBuffers.position[1]->resource.get();
-    CD3DX12_RESOURCE_BARRIER toCopy1 = CD3DX12_RESOURCE_BARRIER::Transition(dstRes1, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-    cmdList->ResourceBarrier(1, &toCopy1);
-    cmdList->CopyBufferRegion(dstRes1, 0, uploadResource.get(), 0, uploadSize);
-    CD3DX12_RESOURCE_BARRIER toUAV1 = CD3DX12_RESOURCE_BARRIER::Transition(dstRes1, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    cmdList->ResourceBarrier(1, &toUAV1);
-    ThrowIfFailed(cmdList->Close());
-    ID3D12CommandList *lists2[] = {cmdList.get()};
-    queue->ExecuteCommandLists(1, lists2);
-    fenceVal++;
-    queue->Signal(fence.get(), fenceVal);
-    if (fence->GetCompletedValue() < fenceVal)
-    {
-        HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        fence->SetEventOnCompletion(fenceVal, ev);
-        WaitForSingleObject(ev, INFINITE);
-        CloseHandle(ev);
-    }
-
-    // TODO: fill index sort buffer?
-
-    // update CPU-side numParticles in CB (mapped copy)
+    m_simParams.numParticles = m_maxParticlesCount;
     ThrowIfFailed(m_simParamsUpload->Map(0, &readRange, &pData));
     memcpy(pData, &m_simParams, sizeof(SimParams));
     m_simParamsUpload->Unmap(0, nullptr);
@@ -281,6 +184,53 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
     m_rootSignature = rootSig;
 }
 
+void SimulationSystem::CreateSimulationKernels()
+{
+    GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
+    std::vector<std::wstring> compileArgs;
+    auto devicePtr = RenderSubsystem::GetDevice();
+    std::filesystem::path shaderBase = L"shaders/simulation";
+
+    m_predictPositions = std::make_unique<SimulationKernels::PredictPositions>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"PredictPositions.hlsl", m_rootSignature);
+
+    m_cellHash = std::make_unique<SimulationKernels::CellHash>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"CellHash.hlsl", m_rootSignature);
+
+    m_hashToIndex = std::make_unique<SimulationKernels::HashToIndex>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"HashToIndex.hlsl", m_rootSignature);
+
+    m_computeDensity = std::make_unique<SimulationKernels::ComputeDensity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDensity.hlsl", m_rootSignature);
+
+    m_computeLambda = std::make_unique<SimulationKernels::ComputeLambda>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeLambda.hlsl", m_rootSignature);
+
+    m_computeDeltaPos = std::make_unique<SimulationKernels::ComputeDeltaPos>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDeltaPos.hlsl", m_rootSignature);
+
+    m_applyDeltaPos = std::make_unique<SimulationKernels::ApplyDeltaPos>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyDeltaPos.hlsl", m_rootSignature);
+
+    m_updatePosVel = std::make_unique<SimulationKernels::UpdatePositionVelocity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"UpdatePositionVelocity.hlsl", m_rootSignature);
+
+    m_viscosity = std::make_unique<SimulationKernels::Viscosity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"Viscosity.hlsl", m_rootSignature);
+
+    m_applyViscosity = std::make_unique<SimulationKernels::ApplyViscosity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyViscosity.hlsl", m_rootSignature);
+
+    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"HeatTransfer.hlsl", m_rootSignature);
+
+    m_collisionProjection = std::make_unique<SimulationKernels::CollisionProjection>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"CollisionProjection.hlsl", m_rootSignature);
+
+    m_oneSweep = std::make_unique<OneSweep>(devicePtr, devInfo, GPUSorting::ORDER_ASCENDING, GPUSorting::KEY_UINT32, GPUSorting::PAYLOAD_UINT32);
+}
+
+// TODO: move to some utility file
 inline std::shared_ptr<StructuredBuffer>
 CreateBuffer(
     ID3D12Device *device,
@@ -380,6 +330,41 @@ void SimulationSystem::InitSimulationBuffers(
             sizeof(uint32_t));
     }
 }
+
+void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
+{
+    std::vector<uint32_t> hostIndices(m_maxParticlesCount);
+    std::iota(hostIndices.begin(), hostIndices.end(), 0u);
+
+    UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(uint32_t);
+
+    auto uploadResource = UploadHelpers::CreateUploadBuffer(device, uploadSize);
+
+    void *pUpload = nullptr;
+    D3D12_RANGE readRange{0, 0}; // CPU write-only
+    ThrowIfFailed(uploadResource->Map(0, &readRange, &pUpload));
+    memcpy(pUpload, hostIndices.data(), uploadSize);
+    uploadResource->Unmap(0, nullptr);
+
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
+    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.GetAddressOf())));
+    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(cmdList.GetAddressOf())));
+
+    auto dstRes = sortBuffers.indexBuffers[0]->resource.Get();
+    UploadHelpers::CopyBufferToResource(cmdList.Get(), uploadResource.Get(), dstRes, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    ThrowIfFailed(cmdList->Close());
+    ID3D12CommandList *lists[] = {cmdList.Get()};
+    auto queue = RenderSubsystem::GetCommandQueue();
+    queue->ExecuteCommandLists(1, lists);
+
+    // fence and wait
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())));
+    uint64_t fenceVal = 1;
+    RenderSubsystem::WaitForFence(fence.Get(), fenceVal);
+}
 #pragma endregion
 
 #pragma region SIMULATE
@@ -419,10 +404,10 @@ void SimulationSystem::Simulate(float dt)
     const uint32_t dst = (m_currentSwapIndex + 1) % 2;
 
     // GPU addresses
-    auto positionsSrc = particleSwapBuffers.position[src]->resource->GetGPUVirtualAddress();
-    auto velocitySrc = particleSwapBuffers.velocity[src]->resource->GetGPUVirtualAddress();
-    auto predictedDst = particleSwapBuffers.predictedPosition[dst]->resource->GetGPUVirtualAddress();
-    auto velocityDst = particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS positionsSrc = particleSwapBuffers.position[src]->resource->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS velocitySrc = particleSwapBuffers.velocity[src]->resource->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS predictedDst = particleSwapBuffers.predictedPosition[dst]->resource->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS velocityDst = particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress();
 
     // 1) Predict positions
     m_predictPositions->Dispatch(cmdList, numParticles, positionsSrc, velocitySrc, predictedDst, velocityDst);

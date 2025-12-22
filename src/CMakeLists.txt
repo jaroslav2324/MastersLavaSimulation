@@ -7,6 +7,7 @@ set(SRC_FILES
     src/ShaderCompiler.cc
     src/Cube.cc
     src/InputHandler.cc
+    src/UploadHelpers.cc
     PARENT_SCOPE 
 )
 

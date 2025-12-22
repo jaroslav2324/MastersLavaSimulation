@@ -27,6 +27,8 @@
 #include <cstring>
 #include <algorithm>
 #include <cassert>
+#include <numeric>
+#include <array>
 
 #include <SimpleMath.h>
 
@@ -46,8 +48,8 @@ inline void ThrowIfFailed(HRESULT hr)
         throw std::exception();
     }
 }
-
-inline int32_t Align256(int32_t size)
+template <typename T>
+inline T Align256(T size)
 {
-    return (size + 255) & ~255;
+    return (size + static_cast<T>(255)) & ~static_cast<T>(255);
 }
