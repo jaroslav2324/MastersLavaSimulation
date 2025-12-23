@@ -6,8 +6,8 @@ StructuredBuffer<uint> sortedParticleIndecies : register(t4);
 StructuredBuffer<uint> cellStart : register(t5);
 StructuredBuffer<uint> cellEnd   : register(t6);
 
-RWStructuredBuffer<float> density     : register(u3);
-RWStructuredBuffer<float> constraintC : register(u4);
+RWStructuredBuffer<float> density     : register(u8);
+RWStructuredBuffer<float> constraintC : register(u9);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -19,7 +19,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     float rho = 0.0;
 
-
+    // TODO: unroll?
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++)

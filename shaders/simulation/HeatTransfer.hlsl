@@ -4,11 +4,9 @@ StructuredBuffer<float3> predictedPositions     : register(t1);
 StructuredBuffer<uint>   sortedParticleIndices  : register(t4);
 StructuredBuffer<uint>   cellStart              : register(t5);
 StructuredBuffer<uint>   cellEnd                : register(t6);
-
-StructuredBuffer<float> temperature             : register(t7);   // T_i
 StructuredBuffer<float> density                 : register(t8);   // ρ_i
 
-RWStructuredBuffer<float> temperatureOut        : register(u6);
+RWStructuredBuffer<float> temperature        : register(u7);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -25,7 +23,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     uint3 cell = GetCellCoord(pi);
 
-    // Search neighbors (27 cells)
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++)
@@ -81,5 +78,5 @@ void CSMain(uint gid : SV_DispatchThreadID)
     // Update temperature
     float newT = Ti + dt * dT;
 
-    temperatureOut[i] = newT;
+    temperature[i] = newT;
 }

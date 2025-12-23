@@ -37,17 +37,64 @@ struct SimParams
     // TODO: init method
 };
 
+enum class BufferSrvIndex : UINT
+{
+    Position0 = 0,
+    Position1 = 1, // predicted
+    Velocity = 2,
+    ParticleHash = 3,
+    SortedIndices = 4,
+    CellStart = 5,
+    CellEnd = 6,
+    Temperature = 7,
+    Density = 8,
+    ConstraintC = 9,
+    Lambda = 10,
+    DeltaP = 11,
+    ViscosityMu = 12,
+    ViscosityCoeff = 13,
+    NumberOfSrvSlots = 14
+};
+
+UINT operator+(UINT offset, BufferSrvIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(BufferSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+
+enum class BufferUavIndex : UINT
+{
+    Position0 = 0,
+    Position1 = 1, // predicted
+    Velocity = 2,
+    ParticleHash = 3,
+    SortedIndices = 4,
+    CellStart = 5,
+    CellEnd = 6,
+    Temperature = 7,
+    Density = 8,
+    ConstraintC = 9,
+    Lambda = 10,
+    DeltaP = 11,
+    ViscosityMu = 12,
+    ViscosityCoeff = 13,
+    NumberOfUavSlots = 14
+};
+
+UINT operator+(UINT offset, BufferUavIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(BufferUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+
 struct ParticleStateSwapBuffers
 {
     // x_i
     std::shared_ptr<StructuredBuffer> position[2] = {nullptr};
 
+    // TODO: remove?
     // q_i*
     std::shared_ptr<StructuredBuffer> predictedPosition[2] = {nullptr};
 
+    // TODO: one velocity?:
     // v_i
     std::shared_ptr<StructuredBuffer> velocity[2] = {nullptr};
 
+    // TODO: one temperature?:
     // T_i
     std::shared_ptr<StructuredBuffer> temperature[2] = {nullptr};
 };

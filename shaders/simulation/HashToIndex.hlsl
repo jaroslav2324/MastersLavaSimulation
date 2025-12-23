@@ -2,9 +2,8 @@
 
 StructuredBuffer<uint> hashes : register(t3);
 
-// размер буферов - количество клеток в кубе
-RWStructuredBuffer<int> cellStart : register(u10);
-RWStructuredBuffer<int> cellEnd   : register(u11);
+RWStructuredBuffer<int> cellStart : register(u5);
+RWStructuredBuffer<int> cellEnd   : register(u6);
 
 [numthreads(256, 1, 1)]
 void CS_FindCellRanges(uint3 DTid : SV_DispatchThreadID)

@@ -5,9 +5,10 @@
 
 StructuredBuffer<float> temperatureIn   : register(t7); // T_i
 
-RWStructuredBuffer<float> muOut        : register(u7); // μ_i result
+RWStructuredBuffer<float> muOut        : register(u12); // μ_i result
 RWStructuredBuffer<float> viscCoeffOut : register(u13); // optional normalized coeff 0..1
 
+// TODO: check
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {

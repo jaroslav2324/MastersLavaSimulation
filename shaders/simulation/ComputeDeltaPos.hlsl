@@ -7,7 +7,7 @@ StructuredBuffer<uint>   cellEnd   : register(t6);
 
 StructuredBuffer<float> lambda : register(t10);
 
-RWStructuredBuffer<float3> deltaP : register(u2);
+RWStructuredBuffer<float3> deltaP : register(u11);
 
 
 [numthreads(256,1,1)]
@@ -64,4 +64,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     dpi /= rho0;
     deltaP[i] = dpi;
+
+    // TODO: move apply here?
 }

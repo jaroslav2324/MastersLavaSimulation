@@ -1,8 +1,8 @@
 
 // ---------- SRV ----------
 // t0  Positions
-// t1  Predicted Positions (read-only alias)
-// t2  Velocities (read-only alias)
+// t1  Predicted Positions 
+// t2  Velocities 
 
 // t3  ParticleHash
 // t4  SortedIndices
@@ -16,19 +16,19 @@
 // t11 ViscosityCoeff
 
 // ---------- UAV ----------
-// u0  PredictedRW
-// u1  VelocitiesRW
-// u2  DeltaP
-// u3  DensityRW
-// u4  ConstraintCRW
-// u5  LambdaRW
-// u6  TemperatureRW
-// u7  ViscosityMu
-// u8  HashRW
-// u9  IndexRW
-// u10 CellStartRW
-// u11 CellEndRW
-// u12 NewPositionsRW
+// u0  PositionsRW
+// u1 PositionsPredictedRW
+// u2  VelocitiesRW
+// u3  HashRW
+// u4  IndexRW
+// u5 CellStartRW
+// u6 CellEndRW
+// u7  TemperatureRW
+// u8  DensityRW
+// u9  ConstraintCRW
+// u10 LambdaRW
+// u11 DeltaP
+// u12  ViscosityMu
 // u13 ViscosityCoeffRW
 
 // ---------- CB ----------

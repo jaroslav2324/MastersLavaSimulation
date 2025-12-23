@@ -112,14 +112,17 @@ public:
     {
     }
 
-    void UpdateSize(uint32_t size) override
+    void UpdateSize(uint32_t size, bool disposeBuffers) override
     {
         if (m_numKeys != size)
         {
             m_numKeys = size;
             m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
             m_globalHistPartitions = divRoundUp(m_numKeys, k_globalHistPartitionSize);
-            DisposeBuffers();
+            if (disposeBuffers)
+            {
+                DisposeBuffers();
+            }
             InitBuffers(m_numKeys, m_partitions);
         }
     }

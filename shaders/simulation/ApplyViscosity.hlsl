@@ -1,13 +1,12 @@
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted : register(t1);
-StructuredBuffer<float3> velocitiesIn : register(t2);
 StructuredBuffer<uint>   sortedParticleIndices : register(t4);
 StructuredBuffer<uint>   cellStart : register(t5);
 StructuredBuffer<uint>   cellEnd   : register(t6);
-StructuredBuffer<float>  viscCoeff : register(t11);
+StructuredBuffer<float>  viscCoeff : register(t13);
 
-RWStructuredBuffer<float3> velocitiesOut : register(u1);
+RWStructuredBuffer<float3> velocities : register(u2);
 
 // TODO: check
 [numthreads(256,1,1)]

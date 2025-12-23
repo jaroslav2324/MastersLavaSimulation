@@ -453,7 +453,7 @@ protected:
 
     virtual void InitComputeShaders() = 0;
 
-    virtual void UpdateSize(uint32_t size) = 0;
+    virtual void UpdateSize(uint32_t size, bool disposeBuffers = true) = 0;
 
     virtual void DisposeBuffers() = 0;
 

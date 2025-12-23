@@ -187,7 +187,11 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 void SimulationSystem::CreateSimulationKernels()
 {
     GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
-    std::vector<std::wstring> compileArgs;
+    std::vector<std::wstring> compileArgs = {
+        DXC_ARG_DEBUG,
+        DXC_ARG_SKIP_OPTIMIZATIONS,
+        L"-Qembed_debug"};
+
     auto devicePtr = RenderSubsystem::GetDevice();
     std::filesystem::path shaderBase = L"shaders/simulation";
 
@@ -234,7 +238,7 @@ void SimulationSystem::CreateSimulationKernels()
         sortBuffers.hashBuffers[1]->resource,
         sortBuffers.indexBuffers[1]->resource,
         true);
-    m_oneSweep->UpdateSize(m_maxParticlesCount);
+    m_oneSweep->UpdateSize(m_maxParticlesCount, false);
 }
 
 // TODO: move to some utility file
@@ -256,10 +260,8 @@ void SimulationSystem::InitSimulationBuffers(
     UINT numCells)
 {
     // Reserve descriptor table ranges that match the root signature
-    // SRV table: 12 entries (t0..t11)
-    // UAV table: 14 entries (u0..u13)
-    m_srvBase = alloc.AllocRange(12);
-    m_uavBase = alloc.AllocRange(14);
+    m_srvBase = alloc.AllocRange(static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots));
+    m_uavBase = alloc.AllocRange(static_cast<UINT>(BufferUavIndex::NumberOfUavSlots));
 
     // Create resources (no descriptors yet)
     for (int i = 0; i < 2; ++i)
@@ -344,46 +346,44 @@ void SimulationSystem::InitSimulationBuffers(
     }
 
     // Create SRV/UAV descriptors using the reserved ranges.
-    // We'll fill SRV slots (0..11) and UAV slots (0..13) with the most-used buffers.
-    particleSwapBuffers.position[0]->CreateSRV(device, alloc, m_srvBase + 0);
-    particleSwapBuffers.position[0]->CreateUAV(device, alloc, m_uavBase + 0);
+    particleSwapBuffers.position[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position0);
+    particleSwapBuffers.position[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position0);
 
-    particleSwapBuffers.predictedPosition[0]->CreateSRV(device, alloc, m_srvBase + 1);
-    particleSwapBuffers.predictedPosition[0]->CreateUAV(device, alloc, m_uavBase + 1);
+    particleSwapBuffers.position[1]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position1);
+    particleSwapBuffers.position[1]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position1);
 
-    particleSwapBuffers.velocity[0]->CreateSRV(device, alloc, m_srvBase + 2);
-    particleSwapBuffers.velocity[0]->CreateUAV(device, alloc, m_uavBase + 2);
+    particleSwapBuffers.velocity[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Velocity);
+    particleSwapBuffers.velocity[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Velocity);
 
-    particleSwapBuffers.temperature[0]->CreateSRV(device, alloc, m_srvBase + 3);
-    particleSwapBuffers.temperature[0]->CreateUAV(device, alloc, m_uavBase + 3);
+    sortBuffers.hashBuffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ParticleHash);
+    sortBuffers.hashBuffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ParticleHash);
+    sortBuffers.indexBuffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::SortedIndices);
+    sortBuffers.indexBuffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::SortedIndices);
+    particleScratchBuffers.cellStart->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::CellStart);
+    particleScratchBuffers.cellStart->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::CellStart);
+    particleScratchBuffers.cellEnd->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::CellEnd);
+    particleScratchBuffers.cellEnd->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::CellEnd);
 
-    particleSwapBuffers.position[1]->CreateSRV(device, alloc, m_srvBase + 4);
-    particleSwapBuffers.position[1]->CreateUAV(device, alloc, m_uavBase + 4);
+    particleSwapBuffers.temperature[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Temperature);
+    particleSwapBuffers.temperature[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Temperature);
 
-    particleSwapBuffers.predictedPosition[1]->CreateSRV(device, alloc, m_srvBase + 5);
-    particleSwapBuffers.predictedPosition[1]->CreateUAV(device, alloc, m_uavBase + 5);
+    particleScratchBuffers.density->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Density);
+    particleScratchBuffers.density->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Density);
 
-    particleSwapBuffers.velocity[1]->CreateSRV(device, alloc, m_srvBase + 6);
-    particleSwapBuffers.velocity[1]->CreateUAV(device, alloc, m_uavBase + 6);
+    particleScratchBuffers.constraintC->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ConstraintC);
+    particleScratchBuffers.constraintC->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ConstraintC);
 
-    particleSwapBuffers.temperature[1]->CreateSRV(device, alloc, m_srvBase + 7);
-    particleSwapBuffers.temperature[1]->CreateUAV(device, alloc, m_uavBase + 7);
+    particleScratchBuffers.lambda->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Lambda);
+    particleScratchBuffers.lambda->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Lambda);
 
-    particleScratchBuffers.density->CreateSRV(device, alloc, m_srvBase + 8);
-    particleScratchBuffers.density->CreateUAV(device, alloc, m_uavBase + 8);
+    particleScratchBuffers.deltaP->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::DeltaP);
+    particleScratchBuffers.deltaP->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::DeltaP);
 
-    particleScratchBuffers.constraintC->CreateSRV(device, alloc, m_srvBase + 9);
-    particleScratchBuffers.constraintC->CreateUAV(device, alloc, m_uavBase + 9);
+    particleScratchBuffers.viscosityMu->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityMu);
+    particleScratchBuffers.viscosityMu->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityMu);
 
-    particleScratchBuffers.lambda->CreateSRV(device, alloc, m_srvBase + 10);
-    particleScratchBuffers.lambda->CreateUAV(device, alloc, m_uavBase + 10);
-
-    particleScratchBuffers.deltaP->CreateSRV(device, alloc, m_srvBase + 11);
-    particleScratchBuffers.deltaP->CreateUAV(device, alloc, m_uavBase + 11);
-
-    // Additional UAV-only slots for viscosity buffers
-    particleScratchBuffers.viscosityMu->CreateUAV(device, alloc, m_uavBase + 12);
-    particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + 13);
+    particleScratchBuffers.viscosityCoeff->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityCoeff);
+    particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityCoeff);
 }
 
 void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
@@ -464,17 +464,16 @@ void SimulationSystem::Simulate(float dt)
     D3D12_GPU_VIRTUAL_ADDRESS predictedDst = particleSwapBuffers.predictedPosition[dst]->resource->GetGPUVirtualAddress();
     D3D12_GPU_VIRTUAL_ADDRESS velocityDst = particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress();
 
+    // TODO: swap positions
+
     // 1) Predict positions
-    m_predictPositions->Dispatch(cmdList, numParticles, positionsSrc, velocitySrc, predictedDst, velocityDst);
+    m_predictPositions->Dispatch(cmdList, numParticles);
 
     // 2) Simple collision projection (in-place on predicted/velocity buffers)
-    m_collisionProjection->Dispatch(cmdList, numParticles, predictedDst, velocityDst);
+    m_collisionProjection->Dispatch(cmdList, numParticles);
 
     // 3) Compute spatial hash into sort buffers (use first pair)
-    m_cellHash->Dispatch(cmdList, numParticles,
-                         predictedDst,
-                         sortBuffers.hashBuffers[0]->resource->GetGPUVirtualAddress(),
-                         sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress());
+    m_cellHash->Dispatch(cmdList, numParticles);
 
     // close and execute command list to ensure hashing is finished before sorting
     // TODO: or wait somehow

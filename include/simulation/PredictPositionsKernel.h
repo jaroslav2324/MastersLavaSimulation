@@ -40,11 +40,7 @@ namespace SimulationKernels
          */
         void Dispatch(
             winrt::com_ptr<ID3D12GraphicsCommandList> cmdList,
-            uint32_t particleCount,
-            const D3D12_GPU_VIRTUAL_ADDRESS &positionsSrc,
-            const D3D12_GPU_VIRTUAL_ADDRESS &velocitySrc,
-            const D3D12_GPU_VIRTUAL_ADDRESS &predictedPositionsDst,
-            const D3D12_GPU_VIRTUAL_ADDRESS &velocityDst)
+            uint32_t particleCount)
         {
             SetPipelineState(cmdList);
 
