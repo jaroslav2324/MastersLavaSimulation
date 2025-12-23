@@ -17,10 +17,9 @@ struct VSOut
 {
     float4 posH : SV_Position;    
     float2 uv   : UV;             // quad UV: (-1..1)
-    float  temp : TEMP;   // TODO: who is TEMP?        
+    float  temp : TEMP;      
 };
 
-// TODO: CPU DrawInstanced(4, particleCount, 0, 0)
 VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 {
     VSOut o;

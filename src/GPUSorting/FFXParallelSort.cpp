@@ -130,15 +130,15 @@ void FFXParallelSort::InitComputeShaders()
     m_psScatter = new FFXParallelSortKernels::FfxPsScatter(m_device, m_devInfo, m_compileArguments, path);
 }
 
-void FFXParallelSort::UpdateSize(uint32_t size)
+void FFXParallelSort::UpdateSize(uint32_t size, bool disposeBuffers)
 {
     if (m_numKeys != size)
     {
         m_numKeys = size;
         m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
         m_numReduceBlocks = divRoundUp(m_partitions, k_tuningParameters.partitionSize);
-
-        DisposeBuffers();
+        if (disposeBuffers)
+            DisposeBuffers();
         InitBuffers(m_numKeys, m_partitions);
     }
 }

@@ -3,11 +3,13 @@
 RWStructuredBuffer<float3> positions  : register(u0); //x_i (from previous frame) -> x_i (new)
 RWStructuredBuffer<float3> predicted  : register(u1); // q_i*
 RWStructuredBuffer<float3> velocities : register(u2); // v_i
+StructuredBuffer<uint>   particleIndices  : register(t4);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
+    if (gid >= numParticles) return;
+    uint i = particleIndices[gid];
 
     float3 x_old = positions[i];
     float3 x_new = predicted[i];

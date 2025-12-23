@@ -1,13 +1,15 @@
 #include "CommonData.hlsl"
 
+StructuredBuffer<uint> particleIndices : register(t4);
+
 RWStructuredBuffer<float3> gPredictedPositions : register(u1);
 RWStructuredBuffer<float3> gVelocity           : register(u2);
 
 [numthreads(256, 1, 1)]
-void CSMain(uint3 tid : SV_DispatchThreadID)
+void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = tid.x;
-    if (i >= numParticles) return;
+    if (gid >= numParticles) return;
+    uint i = particleIndices[gid.x];
 
     float3 q = gPredictedPositions[i];
     float3 v = gVelocity[i];

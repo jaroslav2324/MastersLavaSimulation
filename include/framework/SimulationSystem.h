@@ -3,7 +3,6 @@
 #include "pch.h"
 #include "Particle.h"
 
-
 #include "GPUSorting/GPUSorting.h"
 #include "GPUSorting/OneSweep.h"
 
@@ -41,6 +40,7 @@ private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
     static void CreateSimulationKernels();
     static void InitSimulationBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles, UINT numCells);
+    static void InitTemperatureBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
     static void InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
 
     inline static SimParams m_simParams = {};

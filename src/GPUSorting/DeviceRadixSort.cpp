@@ -153,13 +153,14 @@ void DeviceRadixSort::InitComputeShaders()
     m_downsweep = new DeviceRadixSortKernels::Downsweep(m_device, m_devInfo, m_compileArguments, path);
 }
 
-void DeviceRadixSort::UpdateSize(uint32_t size)
+void DeviceRadixSort::UpdateSize(uint32_t size, bool disposeBuffers)
 {
     if (m_numKeys != size)
     {
         m_numKeys = size;
         m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
-        DisposeBuffers();
+        if (disposeBuffers)
+            DisposeBuffers();
         InitBuffers(m_numKeys, m_partitions);
     }
 }

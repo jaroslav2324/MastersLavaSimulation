@@ -216,7 +216,7 @@ public:
         bool shouldReadBack,
         bool shouldValidate)
     {
-        UpdateSize(testSize);
+        UpdateSize(testSize, true);
         CreateTestInput(seed);
         PrepareSortCmdList();
         ExecuteCommandList();
@@ -259,7 +259,7 @@ public:
         uint32_t seed,
         GPUSorting::ENTROPY_PRESET entropyPreset)
     {
-        UpdateSize(inputSize);
+        UpdateSize(inputSize, true);
 
         const float entLookup[5] = {1.0f, .811f, .544f, .337f, .201f};
         printf("Beginning ");
@@ -324,6 +324,7 @@ public:
 
         return sortPayloadTestsPassed == testsExpected;
     }
+    virtual void UpdateSize(uint32_t size, bool disposeBuffers) = 0;
 
 protected:
     virtual void SetCompileArguments()
@@ -453,8 +454,6 @@ protected:
 
     virtual void InitComputeShaders() = 0;
 
-    virtual void UpdateSize(uint32_t size, bool disposeBuffers = true) = 0;
-
     virtual void DisposeBuffers() = 0;
 
     virtual void InitStaticBuffers() = 0;
@@ -567,7 +566,7 @@ protected:
 
     bool ValidateSort(uint32_t size, uint32_t seed)
     {
-        UpdateSize(size);
+        UpdateSize(size, true);
         CreateTestInput(seed);
         PrepareSortCmdList();
         ExecuteCommandList();

@@ -6,11 +6,10 @@ RWStructuredBuffer<int> cellStart : register(u5);
 RWStructuredBuffer<int> cellEnd   : register(u6);
 
 [numthreads(256, 1, 1)]
-void CS_FindCellRanges(uint3 DTid : SV_DispatchThreadID)
+void CS_FindCellRanges(uint gid : SV_DispatchThreadID)
 {
-    uint i = DTid.x;
-    if (i >= numParticles)
-        return;
+    if (gid >= numParticles) return;
+    uint i = gid;
 
     uint h = hashes[i];
 

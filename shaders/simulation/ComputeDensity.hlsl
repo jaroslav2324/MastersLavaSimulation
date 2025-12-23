@@ -2,7 +2,7 @@
 
 StructuredBuffer<float3> predictedPositions : register(t1);
 
-StructuredBuffer<uint> sortedParticleIndecies : register(t4);
+StructuredBuffer<uint> particleIndecies : register(t4);
 StructuredBuffer<uint> cellStart : register(t5);
 StructuredBuffer<uint> cellEnd   : register(t6);
 
@@ -12,14 +12,14 @@ RWStructuredBuffer<float> constraintC : register(u9);
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
+    if (gid >= numParticles) return;
+    uint i = particleIndecies[gid];
     float3 qi = predictedPositions[i];
 
-    int3 cell = int3(floor(qi / cellSize));
+    int3 cell = GetCellCoord(qi);
 
     float rho = 0.0;
 
-    // TODO: unroll?
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++)
@@ -41,7 +41,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
         [loop]
         for (uint idx = start; idx < end; idx++)
         {
-            uint j = sortedParticleIndecies[idx];
+            uint j = particleIndecies[idx];
+            // do not skip if i == j
+
             float3 qj = predictedPositions[j];
 
             float3 r = qi - qj;

@@ -18,7 +18,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     m_simParams.h2 = m_simParams.h * m_simParams.h;
     m_simParams.dt = 1.0f / 60.0f;
     m_simParams.epsHeatTransfer = 0.01f * m_simParams.h * m_simParams.h;
-    m_simParams.cellSize = m_simParams.h;
+    m_simParams.cellSize = m_simParams.h * 4.0f; // TODO: be careful with this
     // grid resolution: cubic approximation
     int gridRes = std::max(1, (int)std::round(std::cbrt((double)m_gridCellsCount)));
     m_simParams.gridResolution[0] = gridRes;
@@ -54,19 +54,19 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     CreateSimulationKernels();
 
-    // grid dimensions
-    uint32_t dim = static_cast<uint32_t>(std::ceil(std::pow((double)m_maxParticlesCount, 1.0 / 3.0)));
+    int particlesPerAxis = static_cast<int>(std::cbrt(static_cast<double>(m_maxParticlesCount)));
     std::vector<DirectX::SimpleMath::Vector3> hostPositions;
     hostPositions.reserve(m_maxParticlesCount);
-    for (uint32_t z = 0; z < dim && hostPositions.size() < m_maxParticlesCount; ++z)
+    // TODO: better initial distribution
+    for (uint32_t z = 0; z < particlesPerAxis && hostPositions.size() < m_maxParticlesCount; ++z)
     {
-        for (uint32_t y = 0; y < dim && hostPositions.size() < m_maxParticlesCount; ++y)
+        for (uint32_t y = 0; y < particlesPerAxis && hostPositions.size() < m_maxParticlesCount; ++y)
         {
-            for (uint32_t x = 0; x < dim && hostPositions.size() < m_maxParticlesCount; ++x)
+            for (uint32_t x = 0; x < particlesPerAxis && hostPositions.size() < m_maxParticlesCount; ++x)
             {
-                float fx = (x + 0.5f) / (float)dim - 0.5f;
-                float fy = (y + 0.5f) / (float)dim - 0.5f;
-                float fz = (z + 0.5f) / (float)dim - 0.5f;
+                float fx = (x + 0.5f) / (float)particlesPerAxis;
+                float fy = (y + 0.5f) / (float)particlesPerAxis;
+                float fz = (z + 0.5f) / (float)particlesPerAxis;
                 hostPositions.emplace_back(fx, fy, fz);
             }
         }
@@ -130,29 +130,25 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
     CD3DX12_DESCRIPTOR_RANGE srvRange;
     srvRange.Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-        12, // t0 - t11
-        0   // base register t0
-    );
+        static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots),
+        0);
 
     CD3DX12_DESCRIPTOR_RANGE uavRange;
     uavRange.Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        14, // u0 - u13
+        static_cast<UINT>(BufferUavIndex::NumberOfUavSlots),
         0);
 
     CD3DX12_ROOT_PARAMETER rootParams[3];
 
-    // SRV table
     rootParams[0].InitAsDescriptorTable(
         1, &srvRange,
         D3D12_SHADER_VISIBILITY_ALL);
 
-    // UAV table
     rootParams[1].InitAsDescriptorTable(
         1, &uavRange,
         D3D12_SHADER_VISIBILITY_ALL);
 
-    // Constant buffer b0
     rootParams[2].InitAsConstantBufferView(
         0, // b0
         0,
@@ -384,6 +380,8 @@ void SimulationSystem::InitSimulationBuffers(
 
     particleScratchBuffers.viscosityCoeff->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityCoeff);
     particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityCoeff);
+    // initialize temperature buffer with default value (900)
+    InitTemperatureBuffer(device, alloc, numParticles);
 }
 
 void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
@@ -408,6 +406,41 @@ void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllo
 
     auto dstRes = sortBuffers.indexBuffers[0]->resource.get();
     UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), dstRes, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    ThrowIfFailed(cmdList->Close());
+    ID3D12CommandList *lists[] = {cmdList.get()};
+    auto queue = RenderSubsystem::GetCommandQueue();
+    queue->ExecuteCommandLists(1, lists);
+
+    // fence and wait
+    winrt::com_ptr<ID3D12Fence> fence;
+    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+    uint64_t fenceVal = 1;
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
+}
+
+void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
+{
+    // prepare host data filled with 900.0f
+    std::vector<float> hostTemps(numParticles, 900.0f);
+
+    UINT64 uploadSize = UINT64(numParticles) * sizeof(float);
+    auto uploadResource = UploadHelpers::CreateUploadBuffer(device, uploadSize);
+
+    void *pUpload = nullptr;
+    D3D12_RANGE readRange{0, 0};
+    ThrowIfFailed(uploadResource->Map(0, &readRange, &pUpload));
+    memcpy(pUpload, hostTemps.data(), uploadSize);
+    uploadResource->Unmap(0, nullptr);
+
+    winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
+    winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
+    ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
+    ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
+
+    // copy into both temperature swap buffers
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature[0]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature[1]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
@@ -464,7 +497,7 @@ void SimulationSystem::Simulate(float dt)
     D3D12_GPU_VIRTUAL_ADDRESS predictedDst = particleSwapBuffers.predictedPosition[dst]->resource->GetGPUVirtualAddress();
     D3D12_GPU_VIRTUAL_ADDRESS velocityDst = particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress();
 
-    // TODO: swap positions
+    std::swap(particleSwapBuffers.position[0], particleSwapBuffers.position[1]);
 
     // 1) Predict positions
     m_predictPositions->Dispatch(cmdList, numParticles);
@@ -474,9 +507,6 @@ void SimulationSystem::Simulate(float dt)
 
     // 3) Compute spatial hash into sort buffers (use first pair)
     m_cellHash->Dispatch(cmdList, numParticles);
-
-    // close and execute command list to ensure hashing is finished before sorting
-    // TODO: or wait somehow
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
@@ -497,10 +527,7 @@ void SimulationSystem::Simulate(float dt)
     }
 
     // 4) Configure OneSweep to use our hash/index buffers and sort
-
     m_oneSweep->Sort();
-
-    // After sorting, hashes and indices are in sortBuffers.hashBuffers[0] and sortBuffers.indexBuffers[0]
 
     // TODO: probaply one list enough?
     ThrowIfFailed(cmdAlloc->Reset());
@@ -514,80 +541,35 @@ void SimulationSystem::Simulate(float dt)
     cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
 
     // 5) (hash->cell start)
-    m_hashToIndex->Dispatch(cmdList, numParticles,
-                            sortBuffers.hashBuffers[0]->resource->GetGPUVirtualAddress(),
-                            particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                            particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress());
+    m_hashToIndex->Dispatch(cmdList, numParticles);
 
     // 6) PBF solver iterations (3 iterations)
     for (int iter = 0; iter < 3; ++iter)
     {
         // Compute density
-        m_computeDensity->Dispatch(cmdList, numParticles,
-                                   predictedDst,
-                                   sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress(),
-                                   particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                                   particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress(),
-                                   particleScratchBuffers.density->resource->GetGPUVirtualAddress(),
-                                   particleScratchBuffers.constraintC->resource->GetGPUVirtualAddress());
+        m_computeDensity->Dispatch(cmdList, numParticles);
 
         // Compute lambda (constraint multipliers)
-        m_computeLambda->Dispatch(cmdList, numParticles,
-                                  predictedDst,
-                                  sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress(),
-                                  particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                                  particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress(),
-                                  particleScratchBuffers.density->resource->GetGPUVirtualAddress(),
-                                  particleScratchBuffers.constraintC->resource->GetGPUVirtualAddress(),
-                                  particleScratchBuffers.lambda->resource->GetGPUVirtualAddress());
+        m_computeLambda->Dispatch(cmdList, numParticles);
 
         // Compute position corrections
-        m_computeDeltaPos->Dispatch(cmdList, numParticles,
-                                    predictedDst,
-                                    sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress(),
-                                    particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                                    particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress(),
-                                    particleScratchBuffers.lambda->resource->GetGPUVirtualAddress(),
-                                    particleScratchBuffers.deltaP->resource->GetGPUVirtualAddress());
+        m_computeDeltaPos->Dispatch(cmdList, numParticles);
 
         // Apply corrections (in-place on predicted positions)
-        m_applyDeltaPos->Dispatch(cmdList, numParticles,
-                                  predictedDst,
-                                  particleScratchBuffers.deltaP->resource->GetGPUVirtualAddress());
+        m_applyDeltaPos->Dispatch(cmdList, numParticles);
     }
 
     // 7) Update positions and velocities (write to position and velocity dst buffers)
-    m_updatePosVel->Dispatch(cmdList, numParticles,
-                             positionsSrc,
-                             particleSwapBuffers.position[dst]->resource->GetGPUVirtualAddress(),
-                             predictedDst,
-                             particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress());
+    m_updatePosVel->Dispatch(cmdList, numParticles);
 
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
-    m_viscosity->Dispatch(cmdList, numParticles,
-                          particleSwapBuffers.temperature[src]->resource->GetGPUVirtualAddress(),
-                          particleScratchBuffers.viscosityMu->resource->GetGPUVirtualAddress(),
-                          particleScratchBuffers.viscosityCoeff->resource->GetGPUVirtualAddress());
+    m_viscosity->Dispatch(cmdList, numParticles);
 
     // 9) Apply viscosity to velocities
-    m_applyViscosity->Dispatch(cmdList, numParticles,
-                               predictedDst,
-                               particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress(),
-                               sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress(),
-                               particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                               particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress(),
-                               particleScratchBuffers.viscosityCoeff->resource->GetGPUVirtualAddress(),
-                               particleSwapBuffers.velocity[dst]->resource->GetGPUVirtualAddress());
+    m_applyViscosity->Dispatch(cmdList, numParticles);
 
     // 10) Heat transfer (temperature diffusion)
-    m_heatTransfer->Dispatch(cmdList, numParticles,
-                             predictedDst,
-                             sortBuffers.indexBuffers[0]->resource->GetGPUVirtualAddress(),
-                             particleScratchBuffers.cellStart->resource->GetGPUVirtualAddress(),
-                             particleScratchBuffers.cellEnd->resource->GetGPUVirtualAddress(),
-                             particleSwapBuffers.temperature[src]->resource->GetGPUVirtualAddress(),
-                             particleScratchBuffers.density->resource->GetGPUVirtualAddress(),
-                             particleSwapBuffers.temperature[dst]->resource->GetGPUVirtualAddress());
+    m_heatTransfer->Dispatch(cmdList, numParticles);
 
     // finalize remaining GPU work
     ThrowIfFailed(cmdList->Close());
@@ -622,4 +604,11 @@ D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetTemperatureBufferSRV()
     UINT idx = particleSwapBuffers.temperature[m_currentSwapIndex]->srvIndex;
     return alloc->GetGpuHandle(idx);
 }
+#pragma endregion
+
+#pragma region UTILITY
+UINT operator+(UINT offset, BufferSrvIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(BufferSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+UINT operator+(UINT offset, BufferUavIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(BufferUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
 #pragma endregion

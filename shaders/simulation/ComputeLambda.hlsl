@@ -1,7 +1,7 @@
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t1);
-StructuredBuffer<uint> sortedParticleIndecies : register(t4);
+StructuredBuffer<uint> particleIndecies : register(t4);
 StructuredBuffer<uint> cellStart : register(t5);
 StructuredBuffer<uint> cellEnd   : register(t6);
 
@@ -13,7 +13,8 @@ RWStructuredBuffer<float> lambda : register(u10);
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
+    if (gid >= numParticles) return;
+    uint i = particleIndecies[gid];
 
     float3 pi = predictedPositions[i];
 
@@ -43,7 +44,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
         [loop]
         for (uint idx = start; idx < end; idx++)
         {
-            uint j = sortedParticleIndecies[idx];
+            uint j = particleIndecies[idx];
             if (j == i) continue;
 
             float3 pj = predictedPositions[j];
@@ -63,7 +64,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
     // добавляем вклад градиента wrt i
     sumGrad2 += dot(grad_i, grad_i);
 
-    // формула λ // TODO: эпсилон это ху нужно ли добавлять эпсилон в знаменатель?  + eps
-    float lam = -Ci / sumGrad2;
+    float lam = -Ci / (sumGrad2 + eps);
     lambda[i] = lam;
 }

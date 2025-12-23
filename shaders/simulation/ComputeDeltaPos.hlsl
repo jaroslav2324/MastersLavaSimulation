@@ -1,7 +1,7 @@
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted : register(t1);
-StructuredBuffer<uint>   sortedParticleIndices : register(t4);
+StructuredBuffer<uint>   particleIndices : register(t4);
 StructuredBuffer<uint>   cellStart : register(t5);
 StructuredBuffer<uint>   cellEnd   : register(t6);
 
@@ -13,14 +13,15 @@ RWStructuredBuffer<float3> deltaP : register(u11);
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
+    if (gid >= numParticles) return;
+    uint i = particleIndices[gid];
     float3 pi = predicted[i];
     float3 dpi = float3(0,0,0);
 
     // λ_i
     float li = lambda[i];
 
-    int3 cell = int3(floor(pi / cellSize));
+    int3 cell = GetCellCoord(pi);
 
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
@@ -44,7 +45,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
         [loop]
         for (uint idx = start; idx < end; idx++)
         {
-            uint j = sortedParticleIndices[idx];
+            uint j = particleIndices[idx];
             if (j == i) continue;
 
             float3 pj = predicted[j];

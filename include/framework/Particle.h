@@ -16,7 +16,7 @@ struct SimParams
     float cellSize;
 
     float qViscosity = 0.1f; // TODO: check; // parameter from viscosity formula
-    Vector3 worldOrigin = Vector3(-0.5f, -0.5f, -0.5f);
+    Vector3 worldOrigin = Vector3(0.0f, 0.0f, 0.0f);
 
     uint32_t numParticles = 0;
     uint32_t gridResolution[3];
@@ -56,8 +56,8 @@ enum class BufferSrvIndex : UINT
     NumberOfSrvSlots = 14
 };
 
-UINT operator+(UINT offset, BufferSrvIndex index) { return offset + static_cast<UINT>(index); };
-UINT operator+(BufferSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+UINT operator+(UINT offset, BufferSrvIndex index);
+UINT operator+(BufferSrvIndex index, UINT offset);
 
 enum class BufferUavIndex : UINT
 {
@@ -78,8 +78,8 @@ enum class BufferUavIndex : UINT
     NumberOfUavSlots = 14
 };
 
-UINT operator+(UINT offset, BufferUavIndex index) { return offset + static_cast<UINT>(index); };
-UINT operator+(BufferUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+UINT operator+(UINT offset, BufferUavIndex index);
+UINT operator+(BufferUavIndex index, UINT offset);
 
 struct ParticleStateSwapBuffers
 {

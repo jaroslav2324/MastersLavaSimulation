@@ -112,7 +112,7 @@ public:
     {
     }
 
-    void UpdateSize(uint32_t size, bool disposeBuffers) override
+    void UpdateSize(uint32_t size, bool disposeBuffers = true) override
     {
         if (m_numKeys != size)
         {

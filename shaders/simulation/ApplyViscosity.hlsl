@@ -1,7 +1,7 @@
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted : register(t1);
-StructuredBuffer<uint>   sortedParticleIndices : register(t4);
+StructuredBuffer<uint>   particleIndices : register(t4);
 StructuredBuffer<uint>   cellStart : register(t5);
 StructuredBuffer<uint>   cellEnd   : register(t6);
 StructuredBuffer<float>  viscCoeff : register(t13);
@@ -12,16 +12,16 @@ RWStructuredBuffer<float3> velocities : register(u2);
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
-    if (i >= numParticles) return;
+    if (gid >= numParticles) return;
+    uint i = particleIndices[gid];
 
     float3 xi = predicted[i];
-    float3 vi = velocitiesIn[i];
+    float3 vi = velocities[i];
     float ci  = viscCoeff[i];
 
     if (ci <= 0.0)
     {
-        velocitiesOut[i] = vi;
+        velocities[i] = vi;
         return;
     }
 
@@ -49,7 +49,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
         for (uint idx = start; idx < end; idx++)
         {
-            uint j = sortedParticleIndices[idx];
+            uint j = particleIndices[idx];
             if (j == i) continue;
 
             float3 xj = predicted[j];
@@ -59,9 +59,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
             if (r2 >= h2) continue;
 
             float W = cubic_kernel_height(rij);
-            dv += (velocitiesIn[j] - vi) * W;
+            dv += (velocities[j] - vi) * W;
         }
     }
 
-    velocitiesOut[i] = vi + ci * dv;
+    velocities[i] = vi + ci * dv;
 }

@@ -3,6 +3,7 @@
 // Computes mu_i from log(log(mu+gamma)) = q - y*log(T)
 // mu = exp( A * T^{-y} ) - gamma,  A = exp(q)
 
+StructuredBuffer<uint>   particleIndices  : register(t4);
 StructuredBuffer<float> temperatureIn   : register(t7); // T_i
 
 RWStructuredBuffer<float> muOut        : register(u12); // μ_i result
@@ -12,7 +13,8 @@ RWStructuredBuffer<float> viscCoeffOut : register(u13); // optional normalized c
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    uint i = gid;
+    if (gid >= numParticles) return;
+    uint i = particleIndices[gid];
 
     float T = temperatureIn[i];
     // 1) safe temperature (avoid zero / negative)

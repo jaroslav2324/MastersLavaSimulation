@@ -17,11 +17,11 @@ class DeviceRadixSort : public GPUSortBase
     winrt::com_ptr<ID3D12Resource> m_passHistBuffer;
     winrt::com_ptr<ID3D12Resource> m_globalHistBuffer;
 
-    DeviceRadixSortKernels::InitDeviceRadixSort* m_initDeviceRadix;
-    DeviceRadixSortKernels::Upsweep* m_upsweep;
-    DeviceRadixSortKernels::Scan* m_scan;
-    DeviceRadixSortKernels::Downsweep* m_downsweep;
-    UtilityKernels::InitScanTestValues* m_initScanTestValues;
+    DeviceRadixSortKernels::InitDeviceRadixSort *m_initDeviceRadix;
+    DeviceRadixSortKernels::Upsweep *m_upsweep;
+    DeviceRadixSortKernels::Scan *m_scan;
+    DeviceRadixSortKernels::Downsweep *m_downsweep;
+    UtilityKernels::InitScanTestValues *m_initScanTestValues;
 
 public:
     DeviceRadixSort(
@@ -41,12 +41,12 @@ public:
 
     bool TestAll() override;
 
+    void UpdateSize(uint32_t size, bool disposeBuffers = true) override;
+
 protected:
     void InitUtilityComputeShaders() override;
 
     void InitComputeShaders() override;
-
-    void UpdateSize(uint32_t size) override;
 
     void DisposeBuffers() override;
 
