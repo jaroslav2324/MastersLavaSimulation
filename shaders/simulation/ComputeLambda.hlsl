@@ -10,6 +10,8 @@ StructuredBuffer<float> constraintC : register(t9);
 
 RWStructuredBuffer<float> lambda : register(u10);
 
+static const float lambdaMax = 10.0f;
+
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
@@ -39,8 +41,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
-        //if (start == 0xFFFFFFFF) continue;TODO:  remove
-
         [loop]
         for (uint idx = start; idx < end; idx++)
         {
@@ -65,5 +65,5 @@ void CSMain(uint gid : SV_DispatchThreadID)
     sumGrad2 += dot(grad_i, grad_i);
 
     float lam = -Ci / (sumGrad2 + eps);
-    lambda[i] = lam;
+    lambda[i] = clamp(lam, -lambdaMax, lambdaMax);
 }

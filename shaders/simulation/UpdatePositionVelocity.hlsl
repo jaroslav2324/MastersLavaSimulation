@@ -1,9 +1,11 @@
 #include "CommonData.hlsl"
 
-RWStructuredBuffer<float3> positions  : register(u0); //x_i (from previous frame) -> x_i (new)
-RWStructuredBuffer<float3> predicted  : register(u1); // q_i*
-RWStructuredBuffer<float3> velocities : register(u2); // v_i
-StructuredBuffer<uint>   particleIndices  : register(t4);
+RWStructuredBuffer<float3> positions  : register(u0);
+RWStructuredBuffer<float3> predicted  : register(u1);
+RWStructuredBuffer<float3> velocities : register(u2);
+StructuredBuffer<uint>     particleIndices : register(t4);
+
+static const float collisionvelocityDamping = 0.9f;
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -14,15 +16,64 @@ void CSMain(uint gid : SV_DispatchThreadID)
     float3 x_old = positions[i];
     float3 x_new = predicted[i];
 
-    // Velocity from finite difference
+    // --- world bounds ---
+    float3 worldMin = worldOrigin;
+    float3 worldMax = worldOrigin + float3(gridResolution) * cellSize;
+
+    // Optional margin (particle radius)
+    float margin = 0.5 * h;
+
+    worldMin += margin;
+    worldMax -= margin;
+
     float3 v = (x_new - x_old) / dt;
 
-    // Optional damping (numerical + physical)
+    // --- X axis ---
+    if (x_new.x < worldMin.x)
+    {
+        x_new.x = worldMin.x;
+        if (v.x < 0.0)
+            v.x *= -collisionvelocityDamping; 
+    }
+    else if (x_new.x > worldMax.x)
+    {
+        x_new.x = worldMax.x;
+        if (v.x > 0.0)
+            v.x *= -collisionvelocityDamping;
+    }
+
+    // --- Y axis ---
+    if (x_new.y < worldMin.y)
+    {
+        x_new.y = worldMin.y;
+        if (v.y < 0.0)
+            v.y *= -collisionvelocityDamping;
+    }
+    else if (x_new.y > worldMax.y)
+    {
+        x_new.y = worldMax.y;
+        if (v.y > 0.0)
+            v.y *= -collisionvelocityDamping;
+    }
+
+    // --- Z axis ---
+    if (x_new.z < worldMin.z)
+    {
+        x_new.z = worldMin.z;
+        if (v.z < 0.0)
+            v.z *= -collisionvelocityDamping;
+    }
+    else if (x_new.z > worldMax.z)
+    {
+        x_new.z = worldMax.z;
+        if (v.z > 0.0)
+            v.z *= -collisionvelocityDamping;
+    }
+
+    // Optional damping
     v *= velocityDamping;
 
     velocities[i] = v;
     positions[i]  = x_new;
-
-    // TODO: needed?
-    predicted[i] = x_new;
+    predicted[i]  = x_new;
 }

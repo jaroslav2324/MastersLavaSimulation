@@ -2,7 +2,7 @@
 
 Camera::Camera()
 {
-    position = Vector3(0.0f, 0.0f, -5.0f);
+    position = Vector3(0.0f, 0.0f, 1.0f);
     rotation = Quaternion::Identity;
 }
 

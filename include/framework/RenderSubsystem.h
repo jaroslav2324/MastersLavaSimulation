@@ -12,10 +12,12 @@
 struct GlobalConstants
 {
 	Matrix view;
+	Matrix invView;
 	Matrix proj;
 	float nearPlane;
 	float farPlane;
-	float pad[2];
+	float particleRadius;
+	float _pad;
 };
 
 class RenderSubsystem
@@ -87,7 +89,8 @@ private:
 
 	inline static winrt::com_ptr<ID3D12Resource> m_vertexBuffer;
 	inline static D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView{};
-	inline static winrt::com_ptr<ID3D12PipelineState> m_pipelineState;
+	inline static winrt::com_ptr<ID3D12PipelineState> m_particlePipelineState;
+	inline static winrt::com_ptr<ID3D12PipelineState> m_cubePipelineState;
 	inline static winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
 
 	// --- Global constant buffer ---

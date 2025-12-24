@@ -101,13 +101,17 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
 
 void RenderSubsystem::UpdateGlobalConstantBuffer()
 {
+    // TODO: get all from camera
     // Use Camera class to build view matrix
     Matrix view = camera.GetViewMatrix();
-    m_globalConstants.view = view;
+    m_globalConstants.view = view;             //.Transpose();
+    m_globalConstants.invView = view.Invert(); //.Transpose();
     m_globalConstants.proj = Matrix::CreatePerspectiveFieldOfView(
-        DirectX::XMConvertToRadians(60.0f), float(m_width) / float(m_height), 0.1f, 100.0f);
+        DirectX::XMConvertToRadians(60.0f), float(m_width) / float(m_height), 0.1f, 100.0f); //.Transpose();
     m_globalConstants.nearPlane = 0.1f;
     m_globalConstants.farPlane = 100.0f;
+
+    m_globalConstants.particleRadius = 0.8 * SimulationSystem::GetKernelRadius() / 2.0;
 
     // Map and copy data
     UINT8 *pData;
@@ -278,7 +282,7 @@ void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height
     swapChainDesc.Scaling = DXGI_SCALING_NONE;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-    swapChainDesc.Flags = 0;
+    // swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING; // Disable VSync
 
     IDXGISwapChain1 *rawSwapChainPtr = nullptr;
 
@@ -462,7 +466,8 @@ void RenderSubsystem::Draw()
     }
 
     m_commandAllocator->Reset();
-    m_commandList->Reset(m_commandAllocator.get(), m_pipelineState.get());
+    // Initialize command list with cube pipeline (any valid PSO works)
+    m_commandList->Reset(m_commandAllocator.get(), m_cubePipelineState.get());
 
     // Set viewport and scissor
     D3D12_VIEWPORT viewport = {};
@@ -498,20 +503,24 @@ void RenderSubsystem::Draw()
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
     m_commandList->ClearDepthStencilView(m_dsvHeapStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    m_commandList->SetPipelineState(m_pipelineState.get());
+    // Set root signature and update global constants/descriptor heaps
     m_commandList->SetGraphicsRootSignature(m_rootSignature.get());
-
-    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     UpdateGlobalConstantBuffer();
     ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavAllocator->GetHeap()};
     m_commandList->SetDescriptorHeaps(1, heaps);
     m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavAllocator->GetHeap()->GetGPUDescriptorHandleForHeapStart());
 
+    // --- Draw cubes ---
+    // Use cube pipeline (vertex/index draw with POSITION float4 input)
+    m_commandList->SetPipelineState(m_cubePipelineState.get());
+    // cube.Draw will set its per-object CBV (root param 1) and issue DrawIndexed
     cube1.Draw(m_commandList.get());
     cube2.Draw(m_commandList.get());
 
     // --- Draw particles ---
+    // Use particle pipeline (VS generates quads via SV_VertexID/SV_InstanceID)
+    m_commandList->SetPipelineState(m_particlePipelineState.get());
     // Bind particle SRVs (root params 2 and 3)
     D3D12_GPU_DESCRIPTOR_HANDLE posHandle = SimulationSystem::GetPositionBufferSRV();
     D3D12_GPU_DESCRIPTOR_HANDLE tempHandle = SimulationSystem::GetTemperatureBufferSRV();
@@ -521,7 +530,7 @@ void RenderSubsystem::Draw()
     // Draw quads (4 vertices per particle) instanced
     uint32_t particleCount = SimulationSystem::GetNumParticles();
 
-    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     // Vertex shader uses SV_VertexID/SV_InstanceID to generate quad, so draw 4 vertices per instance
     m_commandList->DrawInstanced(4, particleCount, 0, 0);
 
@@ -608,25 +617,71 @@ void RenderSubsystem::CreateRootSignatureAndPipeline()
         throw std::runtime_error("Failed to compile pixel shader from file.");
     }
 
-    // No input layout (vertex shader uses SV_VertexID/SV_InstanceID)
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.InputLayout = {nullptr, 0};
-    psoDesc.pRootSignature = m_rootSignature.get();
-    psoDesc.VS = {vsResult.bytecode->GetBufferPointer(), vsResult.bytecode->GetBufferSize()};
-    psoDesc.PS = {psResult.bytecode->GetBufferPointer(), psResult.bytecode->GetBufferSize()};
-    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    psoDesc.SampleMask = UINT_MAX;
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    psoDesc.SampleDesc.Count = 1;
+    // --- Create particle PSO (no input layout; shader uses SV_VertexID/SV_InstanceID) ---
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC particlePsoDesc = {};
+    particlePsoDesc.InputLayout = {nullptr, 0};
+    particlePsoDesc.pRootSignature = m_rootSignature.get();
+    particlePsoDesc.VS = {vsResult.bytecode->GetBufferPointer(), vsResult.bytecode->GetBufferSize()};
+    particlePsoDesc.PS = {psResult.bytecode->GetBufferPointer(), psResult.bytecode->GetBufferSize()};
+    particlePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    particlePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    particlePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    particlePsoDesc.SampleMask = UINT_MAX;
+    particlePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    particlePsoDesc.NumRenderTargets = 1;
+    particlePsoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    particlePsoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    particlePsoDesc.SampleDesc.Count = 1;
 
-    hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pipelineState.put()));
+    hr = m_device->CreateGraphicsPipelineState(&particlePsoDesc, IID_PPV_ARGS(m_particlePipelineState.put()));
     if (FAILED(hr))
-        throw std::runtime_error("Failed to create pipeline state.");
+        throw std::runtime_error("Failed to create particle pipeline state.");
+
+    // --- Create cube PSO (with input layout matching Cube vertex format) ---
+    auto cubeVsResult = ShaderCompiler::CompileFromFile(
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        "VSMain",
+        "vs_5_0");
+    if (!cubeVsResult.success)
+    {
+        if (cubeVsResult.error)
+            OutputDebugStringA((char *)cubeVsResult.error->GetBufferPointer());
+        throw std::runtime_error("Failed to compile cube vertex shader.");
+    }
+
+    auto cubePsResult = ShaderCompiler::CompileFromFile(
+        L"c:\\Users\\jaro_\\source\\repos\\MastersLavaSimulation\\shaders\\CubeShaders.hlsl",
+        "PSMain",
+        "ps_5_0");
+    if (!cubePsResult.success)
+    {
+        if (cubePsResult.error)
+            OutputDebugStringA((char *)cubePsResult.error->GetBufferPointer());
+        throw std::runtime_error("Failed to compile cube pixel shader.");
+    }
+
+    // Input layout: POSITION as float4
+    D3D12_INPUT_ELEMENT_DESC inputElements[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC cubePsoDesc = {};
+    cubePsoDesc.InputLayout = {inputElements, _countof(inputElements)};
+    cubePsoDesc.pRootSignature = m_rootSignature.get();
+    cubePsoDesc.VS = {cubeVsResult.bytecode->GetBufferPointer(), cubeVsResult.bytecode->GetBufferSize()};
+    cubePsoDesc.PS = {cubePsResult.bytecode->GetBufferPointer(), cubePsResult.bytecode->GetBufferSize()};
+    cubePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    cubePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    cubePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    cubePsoDesc.SampleMask = UINT_MAX;
+    cubePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    cubePsoDesc.NumRenderTargets = 1;
+    cubePsoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    cubePsoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    cubePsoDesc.SampleDesc.Count = 1;
+
+    hr = m_device->CreateGraphicsPipelineState(&cubePsoDesc, IID_PPV_ARGS(m_cubePipelineState.put()));
+    if (FAILED(hr))
+        throw std::runtime_error("Failed to create cube pipeline state.");
 }
 
 LRESULT CALLBACK RenderSubsystem::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)

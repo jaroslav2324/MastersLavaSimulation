@@ -14,6 +14,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
     if (gid >= numParticles) return;
     uint i = particleIndices[gid];
 
+    const float maxGrad = 10.0 * h; // to limit extreme heat transfer
+
     // Read particle data
     float3 pi = predictedPositions[i];
     float Ti  = temperature[i];
@@ -59,6 +61,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
             // numerator: r_ij · ∇W_ij
             float dotTerm = dot(rij, gradW);
+            // clamp to avoid extreme heat transfer
+            dotTerm = clamp(dotTerm, -maxGrad, maxGrad); // TODO: remove or leave?
 
             // denominator: r^2 + 0.01 h^2
             float denom = r2 + epsHeatTransfer;

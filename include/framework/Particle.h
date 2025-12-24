@@ -10,9 +10,9 @@ struct SimParams
     float rho0 = 2800.0f; // rest density
     float mass = 1.0f;    // const, = 1
 
-    float eps = 1e-6f;     // small epsilon; const, 1e-6
+    float eps = 1e-3f;     // small epsilon; const, 1e-3
     float dt;              // delta time
-    float epsHeatTransfer; // (0.01 h^2), stabilizer, typically 0.01
+    float epsHeatTransfer; // h^2, stabilizer
     float cellSize;
 
     float qViscosity = 0.1f; // TODO: check; // parameter from viscosity formula
@@ -21,8 +21,9 @@ struct SimParams
     uint32_t numParticles = 0;
     uint32_t gridResolution[3];
 
-    float velocityDamping = 1.0f;                     // e.g. = 0.99 or 1.0
-    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
+    float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
+    // TODO: Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
+    Vector3 gravityVec = Vector3(0.0f, -0.0981f, 0.0f); // gravity (0, -9.81, 0)
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset

@@ -1,11 +1,13 @@
-// Globals: view/proj
+
 cbuffer Globals : register(b0)
 {
-    matrix view;
-    matrix proj;
+    float4x4 view;
+    float4x4 invView;
+    float4x4 proj;
     float nearPlane;
     float farPlane;
-    float2 pad;
+    float particleRadius;
+    float1 _pad;
 };
 
 // Per-object: model matrix

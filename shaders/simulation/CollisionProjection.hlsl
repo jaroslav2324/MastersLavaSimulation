@@ -14,15 +14,16 @@ void CSMain(uint gid : SV_DispatchThreadID)
     float3 q = gPredictedPositions[i];
     float3 v = gVelocity[i];
 
-    if (q.y < 0.0)
+    // TODO: remove?
+    if (q.y <= 0.0)
     {
-        q.y = 0.0;
+        //q.y = 0.0;
 
         if (v.y < 0.0)
         {
             v.y = 0.0;
             gVelocity[i] = v;
         }
-        gPredictedPositions[i] = q;
+        //gPredictedPositions[i] = q;
     }
 }

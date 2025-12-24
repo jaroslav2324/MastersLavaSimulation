@@ -69,9 +69,9 @@ void InputHandler::ProcessInput(float deltaSeconds, Camera &camera)
     Vector3 moveDelta = Vector3::Zero;
 
     if (m_keys['W'])
-        moveDelta += forward;
-    if (m_keys['S'])
         moveDelta -= forward;
+    if (m_keys['S'])
+        moveDelta += forward;
     if (m_keys['A'])
         moveDelta -= right;
     if (m_keys['D'])

@@ -67,18 +67,43 @@ float cubic_kernel_height(float3 r)
     return k * (2.0 * t*t*t);
 }
 
+// float3 cubic_kernel_gradient(float3 r)
+// {
+//     float dist = length(r);
+//     if (dist > h || dist < 1e-6) return float3(0,0,0);
+//     float q = dist / h;
+//     float invDist = 1.0 / (dist * h);
+//     float3 gradq = r * invDist; // d(q)/d(r) * r/|r| => r/(dist*h)
+//     float l = 48.0 / (PI * h*h*h);
+//     if (q <= 0.5)
+//     {
+//         return l * q * (3.0*q - 2.0) * gradq;
+//     }
+//     float factor = 1.0 - q;
+//     return l * (-factor * factor) * gradq;
+// }
+
 float3 cubic_kernel_gradient(float3 r)
 {
     float dist = length(r);
-    if (dist > h || dist < 1e-6) return float3(0,0,0);
+    if (dist < 1e-6 || dist >= h)
+        return float3(0,0,0);
+
     float q = dist / h;
-    float invDist = 1.0 / (dist * h);
-    float3 gradq = r * invDist; // d(q)/d(r) * r/|r| => r/(dist*h)
-    float l = 48.0 / (PI * h*h*h);
-    if (q <= 0.5)
+    float3 rhat = r / dist;
+
+    // alpha / h = 1 / (PI * h^4)
+    float coeff = 1.0 / (PI * h*h*h*h);
+
+    if (q < 1.0)
     {
-        return l * q * (3.0*q - 2.0) * gradq;
+        float dWdq = (-3.0*q + 2.25*q*q);
+        return coeff * dWdq * rhat;
     }
-    float factor = 1.0 - q;
-    return l * (-factor * factor) * gradq;
+    else
+    {
+        float t = 2.0 - q;
+        float dWdq = -0.75 * t * t;
+        return coeff * dWdq * rhat;
+    }
 }

@@ -1,27 +1,34 @@
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predicted : register(t1);
-StructuredBuffer<uint>   particleIndices : register(t4);
-StructuredBuffer<uint>   cellStart : register(t5);
-StructuredBuffer<uint>   cellEnd   : register(t6);
+StructuredBuffer<float3> predicted        : register(t1);
+StructuredBuffer<uint>   particleIndices  : register(t4);
+StructuredBuffer<uint>   cellStart        : register(t5);
+StructuredBuffer<uint>   cellEnd          : register(t6);
 
-StructuredBuffer<float> lambda : register(t10);
+StructuredBuffer<float> lambda            : register(t10);
 
-RWStructuredBuffer<float3> deltaP : register(u11);
+RWStructuredBuffer<float3> deltaP          : register(u11);
 
+// ---- tunable parameters ----
+static const float kTensile = 0.001f;   // 0.001 .. 0.01
+static const float nTensile = 4.0f;
+static const float deltaQ  = 0.2f;      // in units of h
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
     if (gid >= numParticles) return;
+
     uint i = particleIndices[gid];
     float3 pi = predicted[i];
     float3 dpi = float3(0,0,0);
 
-    // λ_i
     float li = lambda[i];
 
     int3 cell = GetCellCoord(pi);
+
+    // Precompute kernel value at deltaQ
+    float Wdq = cubic_kernel_height(float3(deltaQ * h, 0, 0));
 
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
@@ -40,8 +47,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
-        //if (start == 0xFFFFFFFF) continue;
-
         [loop]
         for (uint idx = start; idx < end; idx++)
         {
@@ -55,16 +60,21 @@ void CSMain(uint gid : SV_DispatchThreadID)
             if (dist2 >= h2) continue;
 
             float3 gradW = cubic_kernel_gradient(rij);
-
             float lj = lambda[j];
 
-            dpi += (li + lj) * gradW;
+            // --- tensile instability correction ---
+            float W = cubic_kernel_height(rij);
+            float scorr = -kTensile * pow(W / Wdq, nTensile);
+
+            dpi += (li + lj + scorr) * gradW;
         }
     }
 
+    float maxDelta = 0.5f * h;
 
-    dpi /= rho0;
-    deltaP[i] = dpi;
+    float len = length(dpi);
+    if (len > maxDelta)
+        dpi *= maxDelta / len;
 
-    // TODO: move apply here?
+    deltaP[i] = dpi / rho0;
 }

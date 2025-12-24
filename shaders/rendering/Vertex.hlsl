@@ -1,23 +1,23 @@
-cbuffer CameraBuffer : register(b0)
+
+cbuffer Globals : register(b0)
 {
     float4x4 view;
+    float4x4 invView;
     float4x4 proj;
+    float nearPlane;
+    float farPlane;
+    float particleRadius;
+    float1 _pad;
 };
 
 StructuredBuffer<float3> particlePositions : register(t0);
 StructuredBuffer<float>  particleTemperature : register(t1);
 
-cbuffer RenderParams : register(b1)
-{
-    float particleRadius; // in world units
-}
-
-
 struct VSOut
 {
     float4 posH : SV_Position;    
-    float2 uv   : UV;             // quad UV: (-1..1)
-    float  temp : TEMP;      
+    float2 uv   : TEXCOORD0;        
+    float  temp : TEXCOORD1;      
 };
 
 VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
@@ -25,7 +25,7 @@ VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     VSOut o;
 
     float3 center = particlePositions[instanceID];
-    float  temp   = particleTemperature[instanceID];
+    o.temp   = particleTemperature[instanceID];
 
     static const float2 corners[4] =
     {
@@ -38,22 +38,16 @@ VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     float2 corner = corners[vertexID % 4];
     o.uv = corner;
 
-    // Billboard: transform quad in camera space
-    // Extract camera right & up from view matrix
-    float3 camRight = float3(view._11, view._21, view._31);
-    float3 camUp    = float3(view._12, view._22, view._32);
-
-    float worldSize = particleRadius;
+    float3 camRight = normalize(view[0].xyz);
+    float3 camUp    = normalize(view[1].xyz);
 
     float3 worldPos =
         center +
-        camRight * (corner.x * worldSize) +
-        camUp    * (corner.y * worldSize);
+        camRight * (corner.x * particleRadius) +
+        camUp    * (corner.y * particleRadius);
 
     float4 posV = mul(view, float4(worldPos, 1.0));
     o.posH = mul(proj, posV);
-
-    o.temp = temp;
 
     return o;
 }

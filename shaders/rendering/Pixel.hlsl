@@ -1,40 +1,62 @@
 struct VSOut
 {
-    float4 posH : SV_Position;
-    float2 uv   : UV;
-    float  temp : TEMP;
+    float4 posH : SV_Position;    
+    float2 uv   : TEXCOORD0;        
+    float  temp : TEXCOORD1;      
 };
 
-// TODO: replace
-// Example temp→color mapping
-float3 TempToColor(float t)
+static const uint LavaLUTSize = 8;
+static const float3 LavaColorLUT[LavaLUTSize] =
 {
-    // t normalized 0..1 ideally
-    // Example gradient: dark red → orange → yellow → white
-    float3 c1 = float3(0.3, 0.0, 0.0); // cold
-    float3 c2 = float3(1.0, 0.3, 0.0);
-    float3 c3 = float3(1.0, 0.9, 0.0);
-    float3 c4 = float3(1.0, 1.0, 1.0); // hot
+    float3(0.02, 0.02, 0.02), // ~500K  почти чёрный
+    float3(0.15, 0.02, 0.02), // тёмно-красный
+    float3(0.35, 0.05, 0.02), // бордовый
+    float3(0.65, 0.10, 0.02), // красно-оранжевый
+    float3(0.90, 0.30, 0.05), // оранжевый
+    float3(1.00, 0.60, 0.10), // жёлто-оранжевый
+    float3(1.00, 0.85, 0.30), // жёлтый
+    float3(1.00, 1.00, 0.80)  // ~1500K почти белый
+};
 
-    // Two-stage lerp
-    if (t < 0.5)
-        return lerp(c1, c2, t * 2.0);
-    else
-        return lerp(c3, c4, (t - 0.5) * 2.0);
+static const float Tmin = 500.0;
+static const float Tmax = 1500.0;
+float3 TempToLavaColor(float temperatureK)
+{
+    float t = clamp(temperatureK, Tmin, Tmax);
+
+    float u = (t - Tmin) / (Tmax - Tmin);
+
+    float fIndex = u * (LavaLUTSize - 1);
+    uint index = (uint)fIndex;
+
+    return LavaColorLUT[index];
 }
+
+// float3 TempToLavaColorSmooth(float temperatureK)
+// {
+//     const float Tmin = 500.0;
+//     const float Tmax = 1500.0;
+//     float t = clamp(temperatureK, Tmin, Tmax);
+//     float u = (t - Tmin) / (Tmax - Tmin);
+//     float fIndex = u * (LavaLUTSize - 1);
+//     uint i0 = (uint)fIndex;
+//     uint i1 = min(i0 + 1, LavaLUTSize - 1);
+//     float frac = frac(fIndex);
+//     // очень мягкая интерполяция
+//     frac = smoothstep(0.0, 1.0, frac);
+//     return lerp(LavaColorLUT[i0], LavaColorLUT[i1], frac);
+// }
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    // circular mask
     float r = length(i.uv);
-    if (r > 1.0)
-        discard;
+    clip(1.0 - r);
 
-    float t = i.temp;        // 0..1 normalized
-    float3 col = TempToColor(t);
+    float3 col = TempToLavaColor(i.temp);
 
-    // optional soft falloff on edges for nicer spheres
-    float edge = smoothstep(1.0, 0.8, r);
+    // мягкое затухание по краю частицы
+    //float edge = smoothstep(1.0, 0.8, r);
 
-    return float4(col * edge, 1.0);
+    //return float4(col * edge, 1.0);
+    return float4(col, 1.0);
 }

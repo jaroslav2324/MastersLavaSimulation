@@ -35,6 +35,14 @@ public:
     static D3D12_GPU_DESCRIPTOR_HANDLE GetPositionBufferSRV();
     static D3D12_GPU_DESCRIPTOR_HANDLE GetTemperatureBufferSRV();
     static uint32_t GetNumParticles() { return m_simParams.numParticles; }
+    static float GetKernelRadius() { return m_simParams.h; }
+
+    // Particle initialization helpers
+    static std::vector<DirectX::SimpleMath::Vector3> GenerateUniformGridPositions(UINT numParticles);
+    static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseBottomWithSphere(UINT numParticles);
+    static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseRandomPositions(UINT numParticles, unsigned seed = 1337);
+    // Generate temperatures for a set of positions according to scene rules
+    static void GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
@@ -69,8 +77,8 @@ private:
     inline static UINT m_srvBase = 0;
     inline static UINT m_uavBase = 0;
 
-    const static int m_gridCellsCount = 256;
-    const static int m_maxParticlesCount = 1 << 10; // TODO: move to params?
+    const static int m_gridCellsCount = 1 << 9;
+    const static int m_maxParticlesCount = 1 << 13; // TODO: move to params?
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;
