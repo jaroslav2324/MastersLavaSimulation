@@ -36,7 +36,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
-        //if (start == 0xFFFFFFFF) continue;
 
         [loop]
         for (uint idx = start; idx < end; idx++)

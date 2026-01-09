@@ -4,9 +4,10 @@ StructuredBuffer<float3> predictedPositions     : register(t1);
 StructuredBuffer<uint>   particleIndices  : register(t4);
 StructuredBuffer<uint>   cellStart              : register(t5);
 StructuredBuffer<uint>   cellEnd                : register(t6);
-StructuredBuffer<float> density                 : register(t8);   // ρ_i
+StructuredBuffer<float> density                 : register(t8);   // ρ_i read
+StructuredBuffer<float> temperatureIn           : register(t7);   // T_i read
 
-RWStructuredBuffer<float> temperature        : register(u7);
+RWStructuredBuffer<float> temperature        : register(u7); // T_i write
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -18,7 +19,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     // Read particle data
     float3 pi = predictedPositions[i];
-    float Ti  = temperature[i];
+    float Ti  = temperatureIn[i]; // read from input buffer
     float rhoi = density[i];
     float ki = GetThermalConductivity(Ti);
 
@@ -52,7 +53,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float r2 = dot(rij, rij);
             if (r2 >= h2) continue;
 
-            float Tj = temperature[j];
+            float Tj = temperatureIn[j]; // read from input buffer
             float rhoj = density[j];
             float kj = GetThermalConductivity(Tj);
 

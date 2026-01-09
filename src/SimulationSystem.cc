@@ -234,7 +234,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     UploadHelpers::CopyBufferToResource(
         cmdList.get(),
         uploadResource.get(),
-        particleSwapBuffers.position[0]->resource.get(),
+        particleSwapBuffers.position.buffers[0]->resource.get(),
         uploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -243,7 +243,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     UploadHelpers::CopyBufferToResource(
         cmdList.get(),
         uploadResource.get(),
-        particleSwapBuffers.position[1]->resource.get(),
+        particleSwapBuffers.position.buffers[1]->resource.get(),
         uploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -252,7 +252,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     UploadHelpers::CopyBufferToResource(
         cmdList.get(),
         uploadTempResource.get(),
-        particleSwapBuffers.temperature[0]->resource.get(),
+        particleSwapBuffers.temperature.buffers[0]->resource.get(),
         tempUploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -260,7 +260,7 @@ void SimulationSystem::Init(ID3D12Device *device)
     UploadHelpers::CopyBufferToResource(
         cmdList.get(),
         uploadTempResource.get(),
-        particleSwapBuffers.temperature[1]->resource.get(),
+        particleSwapBuffers.temperature.buffers[1]->resource.get(),
         tempUploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -418,29 +418,34 @@ void SimulationSystem::InitSimulationBuffers(
     m_srvBase = alloc.AllocRange(static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots));
     m_uavBase = alloc.AllocRange(static_cast<UINT>(BufferUavIndex::NumberOfUavSlots));
 
+    // Reserve ping-pong descriptor ranges for indirection
+    m_pingPongSrvBase = alloc.AllocRange(static_cast<UINT>(PingPongSrvIndex::NumberOfPingPongSrvSlots));
+    m_pingPongUavBase = alloc.AllocRange(static_cast<UINT>(PingPongUavIndex::NumberOfPingPongUavSlots));
+
     // Create resources (no descriptors yet)
     for (int i = 0; i < 2; ++i)
     {
-        particleSwapBuffers.position[i] = CreateBuffer(
+        particleSwapBuffers.position.buffers[i] = CreateBuffer(
             device,
             numParticles,
             sizeof(DirectX::SimpleMath::Vector3));
 
-        particleSwapBuffers.predictedPosition[i] = CreateBuffer(
+        particleSwapBuffers.velocity.buffers[i] = CreateBuffer(
             device,
             numParticles,
             sizeof(DirectX::SimpleMath::Vector3));
 
-        particleSwapBuffers.velocity[i] = CreateBuffer(
-            device,
-            numParticles,
-            sizeof(DirectX::SimpleMath::Vector3));
-
-        particleSwapBuffers.temperature[i] = CreateBuffer(
+        particleSwapBuffers.temperature.buffers[i] = CreateBuffer(
             device,
             numParticles,
             sizeof(float));
     }
+
+    // Single buffers for scratch data (no ping-pong needed)
+    particleScratchBuffers.predictedPosition = CreateBuffer(
+        device,
+        numParticles,
+        sizeof(DirectX::SimpleMath::Vector3));
 
     particleScratchBuffers.density = CreateBuffer(
         device,
@@ -501,14 +506,15 @@ void SimulationSystem::InitSimulationBuffers(
     }
 
     // Create SRV/UAV descriptors using the reserved ranges.
-    particleSwapBuffers.position[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position0);
-    particleSwapBuffers.position[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position0);
+    particleSwapBuffers.position.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position0);
+    particleSwapBuffers.position.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position0);
 
-    particleSwapBuffers.position[1]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position1);
-    particleSwapBuffers.position[1]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position1);
+    // Predicted position (now in scratch buffers)
+    particleScratchBuffers.predictedPosition->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position1);
+    particleScratchBuffers.predictedPosition->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position1);
 
-    particleSwapBuffers.velocity[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Velocity);
-    particleSwapBuffers.velocity[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Velocity);
+    particleSwapBuffers.velocity.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Velocity);
+    particleSwapBuffers.velocity.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Velocity);
 
     sortBuffers.hashBuffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ParticleHash);
     sortBuffers.hashBuffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ParticleHash);
@@ -519,9 +525,10 @@ void SimulationSystem::InitSimulationBuffers(
     particleScratchBuffers.cellEnd->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::CellEnd);
     particleScratchBuffers.cellEnd->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::CellEnd);
 
-    particleSwapBuffers.temperature[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Temperature);
-    particleSwapBuffers.temperature[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Temperature);
+    particleSwapBuffers.temperature.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Temperature);
+    particleSwapBuffers.temperature.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Temperature);
 
+    // Single scratch buffers (no ping-pong)
     particleScratchBuffers.density->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Density);
     particleScratchBuffers.density->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Density);
 
@@ -539,7 +546,23 @@ void SimulationSystem::InitSimulationBuffers(
 
     particleScratchBuffers.viscosityCoeff->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityCoeff);
     particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityCoeff);
-    // initialize temperature buffer with default value (900)
+
+    // Create ping-pong descriptors for swap buffers (position, velocity, temperature)
+    particleSwapBuffers.position.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Position0);
+    particleSwapBuffers.position.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Position0);
+    particleSwapBuffers.position.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Position1);
+    particleSwapBuffers.position.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Position1);
+
+    particleSwapBuffers.temperature.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Temperature0);
+    particleSwapBuffers.temperature.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Temperature0);
+    particleSwapBuffers.temperature.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Temperature1);
+    particleSwapBuffers.temperature.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Temperature1);
+
+    particleSwapBuffers.velocity.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Velocity0);
+    particleSwapBuffers.velocity.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Velocity0);
+    particleSwapBuffers.velocity.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Velocity1);
+    particleSwapBuffers.velocity.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Velocity1);
+
     InitTemperatureBuffer(device, alloc, numParticles);
 }
 
@@ -598,8 +621,8 @@ void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, DescriptorAll
     ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
 
     // copy into both temperature swap buffers
-    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature[0]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature[1]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature.buffers[0]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), particleSwapBuffers.temperature.buffers[1]->resource.get(), uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
@@ -647,7 +670,9 @@ void SimulationSystem::Simulate(float dt)
 
     const uint32_t numParticles = static_cast<uint32_t>(m_simParams.numParticles);
 
-    std::swap(particleSwapBuffers.position[0], particleSwapBuffers.position[1]);
+    // Swap position for read/write separation
+    particleSwapBuffers.position.Swap();
+    // TODO: copy descriptors?
 
     // 1) Predict positions
     m_predictPositions->Dispatch(cmdList, numParticles);
@@ -696,13 +721,13 @@ void SimulationSystem::Simulate(float dt)
     // 6) PBF solver iterations
     for (int iter = 0; iter < 5; ++iter)
     {
-        // Compute density
+        // Compute density (single buffer, no ping-pong needed)
         m_computeDensity->Dispatch(cmdList, numParticles);
 
-        // Compute lambda (constraint multipliers)
+        // Compute lambda (single buffer, no ping-pong needed)
         m_computeLambda->Dispatch(cmdList, numParticles);
 
-        // Compute position corrections
+        // Compute position corrections (single buffer, no ping-pong needed)
         m_computeDeltaPos->Dispatch(cmdList, numParticles);
 
         // Apply corrections (in-place on predicted positions)
@@ -711,6 +736,9 @@ void SimulationSystem::Simulate(float dt)
 
     // 7) Update positions and velocities (write to position and velocity dst buffers)
     m_updatePosVel->Dispatch(cmdList, numParticles);
+
+    // Swap velocity for read/write separation
+    particleSwapBuffers.velocity.Swap();
 
     // TODO: enable
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
@@ -721,7 +749,9 @@ void SimulationSystem::Simulate(float dt)
     // m_applyViscosity->Dispatch(cmdList, numParticles);
 
     // 10) Heat transfer (temperature diffusion)
+    // Temperature uses ping-pong for read/write separation
     m_heatTransfer->Dispatch(cmdList, numParticles);
+    particleSwapBuffers.temperature.Swap();
 
     // finalize remaining GPU work
     ThrowIfFailed(cmdList->Close());
@@ -746,14 +776,14 @@ void SimulationSystem::Simulate(float dt)
 D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetPositionBufferSRV()
 {
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
-    UINT idx = particleSwapBuffers.position[m_currentSwapIndex]->srvIndex;
+    UINT idx = particleSwapBuffers.position.GetReadBuffer()->srvIndex;
     return alloc->GetGpuHandle(idx);
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetTemperatureBufferSRV()
 {
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
-    UINT idx = particleSwapBuffers.temperature[m_currentSwapIndex]->srvIndex;
+    UINT idx = particleSwapBuffers.temperature.GetReadBuffer()->srvIndex;
     return alloc->GetGpuHandle(idx);
 }
 #pragma endregion
@@ -763,4 +793,8 @@ UINT operator+(UINT offset, BufferSrvIndex index) { return offset + static_cast<
 UINT operator+(BufferSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
 UINT operator+(UINT offset, BufferUavIndex index) { return offset + static_cast<UINT>(index); };
 UINT operator+(BufferUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+UINT operator+(UINT offset, PingPongSrvIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(PingPongSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
+UINT operator+(UINT offset, PingPongUavIndex index) { return offset + static_cast<UINT>(index); };
+UINT operator+(PingPongUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
 #pragma endregion

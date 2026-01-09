@@ -5,7 +5,6 @@ StructuredBuffer<uint> particleIndecies : register(t4);
 StructuredBuffer<uint> cellStart : register(t5);
 StructuredBuffer<uint> cellEnd   : register(t6);
 
-StructuredBuffer<float> density : register(t8);
 StructuredBuffer<float> constraintC : register(t9);
 
 RWStructuredBuffer<float> lambda : register(u10);

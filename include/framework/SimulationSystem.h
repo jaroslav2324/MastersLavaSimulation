@@ -77,6 +77,10 @@ private:
     inline static UINT m_srvBase = 0;
     inline static UINT m_uavBase = 0;
 
+    // ping-pong descriptor ranges for indirection
+    inline static UINT m_pingPongSrvBase = 0;
+    inline static UINT m_pingPongUavBase = 0;
+
     const static int m_gridCellsCount = 1 << 9;
     const static int m_maxParticlesCount = 1 << 13; // TODO: move to params?
     inline static unsigned int m_currentSwapIndex = 0;

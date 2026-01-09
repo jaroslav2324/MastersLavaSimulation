@@ -5,8 +5,9 @@ StructuredBuffer<uint>   particleIndices : register(t4);
 StructuredBuffer<uint>   cellStart : register(t5);
 StructuredBuffer<uint>   cellEnd   : register(t6);
 StructuredBuffer<float>  viscCoeff : register(t13);
+StructuredBuffer<float3> velocitiesIn : register(t2); // read velocities
 
-RWStructuredBuffer<float3> velocities : register(u2);
+RWStructuredBuffer<float3> velocities : register(u2); // write velocities
 
 // TODO: check
 [numthreads(256,1,1)]
@@ -16,7 +17,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
     uint i = particleIndices[gid];
 
     float3 xi = predicted[i];
-    float3 vi = velocities[i];
+    float3 vi = velocitiesIn[i]; // read from input buffer
     float ci  = viscCoeff[i];
 
     if (ci <= 0.0)
@@ -59,7 +60,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             if (r2 >= h2) continue;
 
             float W = cubic_kernel_height(rij);
-            dv += (velocities[j] - vi) * W;
+            dv += (velocitiesIn[j] - vi) * W;
         }
     }
 

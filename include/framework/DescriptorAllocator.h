@@ -68,6 +68,25 @@ public:
         return m_heap.get();
     }
 
+    void CopyDescriptor(UINT srcIndex, UINT dstIndex)
+    {
+        assert(dstIndex < m_capacity);
+        assert(srcIndex < m_capacity);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE dst =
+            GetCpuHandle(dstIndex);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE src =
+            GetCpuHandle(srcIndex);
+
+        m_device->CopyDescriptorsSimple(
+            1,     // num descriptors
+            dst,   // destination
+            src,   // source
+            m_type // heap type (SRV/UAV/CBV)
+        );
+    }
+
 private:
     ID3D12Device *m_device = nullptr;
     winrt::com_ptr<ID3D12DescriptorHeap> m_heap;

@@ -5,9 +5,9 @@ StructuredBuffer<uint>   particleIndices  : register(t4);
 StructuredBuffer<uint>   cellStart        : register(t5);
 StructuredBuffer<uint>   cellEnd          : register(t6);
 
-StructuredBuffer<float> lambda            : register(t10);
+StructuredBuffer<float> lambda            : register(t10); // read lambda
 
-RWStructuredBuffer<float3> deltaP          : register(u11);
+RWStructuredBuffer<float3> deltaP          : register(u11); // write deltaP
 
 // ---- tunable parameters ----
 static const float kTensile = 0.001f;   // 0.001 .. 0.01

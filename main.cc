@@ -1,6 +1,8 @@
 
 #include "pch.h"
 
+#include <chrono>
+
 #include "framework/RenderSubsystem.h"
 #include "framework/SimulationSystem.h"
 
@@ -10,6 +12,8 @@ int main(int argc, char **argv)
 
 	RenderSubsystem::Init();
 	SimulationSystem::Init(RenderSubsystem::GetDevice().get());
+
+	std::chrono::steady_clock::time_point lastTime = std::chrono::steady_clock::now();
 
 	MSG msg = {};
 	while (msg.message != WM_QUIT)
@@ -21,8 +25,11 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			// TODO: pass delta time
-			SimulationSystem::Simulate(1.0f / 60.0f);
+			std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
+			std::chrono::duration<float> deltaTime = currentTime - lastTime;
+			lastTime = currentTime;
+
+			SimulationSystem::Simulate(deltaTime.count());
 			RenderSubsystem::Draw();
 		}
 	}
