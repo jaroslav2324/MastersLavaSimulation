@@ -193,6 +193,7 @@ void RenderSubsystem::CreateFence()
         throw std::runtime_error("Failed to create fence.");
 }
 
+// TODO: move somewhere
 void RenderSubsystem::WaitForFence(ID3D12Fence *fence, uint64_t fenceValue)
 {
     auto queue = GetCommandQueue();

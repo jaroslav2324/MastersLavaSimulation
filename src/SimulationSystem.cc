@@ -576,6 +576,9 @@ void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllo
     auto dstRes = sortBuffers.indexBuffers[0]->resource.get();
     UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), dstRes, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+    auto dstRes2 = sortBuffers.indexBuffers[1]->resource.get();
+    UploadHelpers::CopyBufferToResource(cmdList.get(), uploadResource.get(), dstRes2, uploadSize, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
     auto queue = RenderSubsystem::GetCommandQueue();
@@ -741,8 +744,18 @@ void SimulationSystem::SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdLis
 #pragma endregion
 
 #pragma region SIMULATE
+static winrt::com_ptr<ID3D12Fence> fence = nullptr;
 void SimulationSystem::Simulate(float dt)
 {
+    winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
+
+    static int fenceVal;
+
+    if (!fence)
+    {
+        ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+    }
+
     m_simParams.dt = dt;
 
     // copy updated SimParams into the upload constant buffer
@@ -753,8 +766,6 @@ void SimulationSystem::Simulate(float dt)
     m_simParamsUpload->Unmap(0, nullptr);
 
     std::shared_ptr<DescriptorAllocator> allocGPU = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
-
-    winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 
     // TODO: do not create allocator and list each frame
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
@@ -769,12 +780,15 @@ void SimulationSystem::Simulate(float dt)
 
     // 1) Predict positions
     m_predictPositions->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleScratchBuffers.predictedPosition->resource);
 
     // 2) Simple collision projection (in-place on predicted/velocity buffers)
     m_collisionProjection->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleScratchBuffers.predictedPosition->resource);
 
-    // 3) Compute spatial hash into sort buffers (use first pair)
+    // 3) Compute spatial hash into sort buffers
     m_cellHash->Dispatch(cmdList, numParticles);
+    // UAVBarrierSingle(cmdList, sortBuffers.hashBuffers[0]->resource);
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
@@ -782,48 +796,47 @@ void SimulationSystem::Simulate(float dt)
     queue->ExecuteCommandLists(1, lists);
     ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
 
-    // TODO: delete or not?
-    // wait for completion
-    winrt::com_ptr<ID3D12Fence> fence;
-    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
-    uint64_t fenceVal = 1;
-    queue->Signal(fence.get(), fenceVal);
-    if (fence->GetCompletedValue() < fenceVal)
-    {
-        HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        fence->SetEventOnCompletion(fenceVal, ev);
-        WaitForSingleObject(ev, INFINITE);
-        CloseHandle(ev);
-    }
+    fenceVal++;
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 
+    // TODO: sort to this command list
     // 4) Configure OneSweep to use our hash/index buffers and sort
     m_oneSweep->Sort();
+
+    fenceVal++;
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 
     SetRootSigAndDescTables(cmdList.get(), *allocGPU);
 
     // 5) (hash->cell start)
     m_hashToIndex->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleScratchBuffers.cellStart->resource);
+    UAVBarrierSingle(cmdList, particleScratchBuffers.cellEnd->resource);
 
     // 6) PBF solver iterations
-    for (int iter = 0; iter < 5; ++iter)
+    for (int iter = 0; iter < 10; ++iter)
     {
         // Compute density
         m_computeDensity->Dispatch(cmdList, numParticles);
+        UAVBarrierSingle(cmdList, particleScratchBuffers.density->resource);
 
         // Compute lambda
         m_computeLambda->Dispatch(cmdList, numParticles);
+        UAVBarrierSingle(cmdList, particleScratchBuffers.lambda->resource);
 
         // Compute position corrections
         m_computeDeltaPos->Dispatch(cmdList, numParticles);
+        UAVBarrierSingle(cmdList, particleScratchBuffers.deltaP->resource);
 
         // Apply corrections
         m_applyDeltaPos->Dispatch(cmdList, numParticles);
+        UAVBarrierSingle(cmdList, particleScratchBuffers.predictedPosition->resource);
     }
 
     // 7) Update positions and velocities (write to position and velocity dst buffers)
     m_updatePosVel->Dispatch(cmdList, numParticles);
-    // particleSwapBuffers.velocity.Swap();
-    // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
+    UAVBarrierSingle(cmdList, particleSwapBuffers.position.GetWriteBuffer()->resource);
+    UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
 
     // TODO: enable
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
@@ -833,13 +846,13 @@ void SimulationSystem::Simulate(float dt)
     // 9) Apply viscosity to velocities
     // m_applyViscosity->Dispatch(cmdList, numParticles);
     // particleSwapBuffers.velocity.Swap();
+    // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // 10) Heat transfer (temperature diffusion)
     // Temperature uses ping-pong for read/write separation
     m_heatTransfer->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleSwapBuffers.temperature.GetWriteBuffer()->resource);
     particleSwapBuffers.temperature.Swap();
-
-    // particleSwapBuffers.position.Swap();
 
     // finalize remaining GPU work
     ThrowIfFailed(cmdList->Close());
@@ -849,14 +862,7 @@ void SimulationSystem::Simulate(float dt)
 
     // wait for final completion
     fenceVal++;
-    queue->Signal(fence.get(), fenceVal);
-    if (fence->GetCompletedValue() < fenceVal)
-    {
-        HANDLE ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        fence->SetEventOnCompletion(fenceVal, ev);
-        WaitForSingleObject(ev, INFINITE);
-        CloseHandle(ev);
-    }
+    RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 }
 #pragma endregion
 

@@ -58,5 +58,7 @@ float4 PSMain(VSOut i) : SV_Target
     //float edge = smoothstep(1.0, 0.8, r);
 
     //return float4(col * edge, 1.0);
+
+
     return float4(col, 1.0);
 }

@@ -1,30 +1,31 @@
 // #12
+
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predictedPositions     : register(t7);
-StructuredBuffer<uint>   particleIndices  : register(t4);
-StructuredBuffer<uint>   cellStart              : register(t5);
-StructuredBuffer<uint>   cellEnd                : register(t6);
-StructuredBuffer<float> density                 : register(t8);   // ρ_i read
-StructuredBuffer<float> temperatureIn           : register(t2);   // T_i read
+StructuredBuffer<float3> predictedPositions : register(t7);
+StructuredBuffer<uint>   particleIndices    : register(t4);
+StructuredBuffer<uint>   cellStart           : register(t5);
+StructuredBuffer<uint>   cellEnd             : register(t6);
+StructuredBuffer<float>  density             : register(t8);
+StructuredBuffer<float>  temperatureIn       : register(t2);
 
-RWStructuredBuffer<float> temperature        : register(u2); // T_i write
+RWStructuredBuffer<float> temperatureOut     : register(u2);
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    if (gid >= numParticles) return;
+    if (gid >= numParticles)
+        return;
+
     uint i = particleIndices[gid];
 
-    const float maxGrad = 10.0 * h; // to limit extreme heat transfer
-
-    // Read particle data
     float3 pi = predictedPositions[i];
-    float Ti  = temperatureIn[i]; // read from input buffer
-    float rhoi = density[i];
+    float  Ti = temperatureIn[i];
+    float  rhoi = max(density[i], 1e-6);
+
     float ki = GetThermalConductivity(Ti);
 
-    float laplacian = 0.0;
+    float dTdt = 0.0;
 
     uint3 cell = GetCellCoord(pi);
 
@@ -33,13 +34,10 @@ void CSMain(uint gid : SV_DispatchThreadID)
     for (int dx = -1; dx <= 1; dx++)
     {
         int3 nc = int3(cell) + int3(dx, dy, dz);
-
-// TODO: IsCellValid check
-        if (nc.x < 0 || nc.y < 0 || nc.z < 0) continue;
-        if (nc.x >= gridResolution.x || nc.y >= gridResolution.y || nc.z >= gridResolution.z) continue;
+        if (any(nc < 0) || any(nc >= int3(gridResolution)))
+            continue;
 
         uint hash = GetCellHash(uint3(nc));
-
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -51,39 +49,37 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
             float3 pj = predictedPositions[j];
             float3 rij = pi - pj;
-            float r2 = dot(rij, rij);
-            if (r2 >= h2) continue;
 
-            float Tj = temperatureIn[j]; // read from input buffer
-            float rhoj = density[j];
+            float r2 = dot(rij, rij);
+            if (r2 >= h2 || r2 < 1e-12)
+                continue;
+
+            float Tj = temperatureIn[j];
+            float rhoj = max(density[j], 1e-6);
             float kj = GetThermalConductivity(Tj);
 
-            // kernel gradient
             float3 gradW = cubic_kernel_gradient(rij);
 
-            // numerator: r_ij · ∇W_ij
             float dotTerm = dot(rij, gradW);
-            // clamp to avoid extreme heat transfer
-            dotTerm = clamp(dotTerm, -maxGrad, maxGrad); // TODO: remove or leave?
+            float denom   = r2 + epsHeatTransfer;
 
-            // denominator: r^2 + 0.01 h^2
-            float denom = r2 + epsHeatTransfer;
+            float kij = (2.0 * ki * kj) / max(ki + kj, 1e-6);
 
-            // term = (m_j / rho_j) * (k_j*T_j - k_i*T_i) * dotTerm / denom
-            float diffTerm = (kj * Tj) - (ki * Ti);
+            float contrib =
+                mass *
+                kij *
+                (Tj - Ti) *
+                dotTerm /
+                (rhoi * rhoj * denom);
 
-            laplacian += (mass / rhoj) * diffTerm * (dotTerm / denom);
+            dTdt += clamp(contrib, -1.0, 1.0);
         }
     }
 
-    // Multiply by the leading factor 2 from the formula
-    laplacian *= 2.0;
+    float newT = Ti + dt * dTdt;
 
-    // Heat equation: dT/dt = k_i * laplacian
-    float dT = ki * laplacian;
+    // optional clamp (physical bounds)
+    //newT = clamp(newT, 0.0f, 2000.0f);
 
-    // Update temperature
-    float newT = Ti + dt * dT;
-
-    temperature[i] = newT;
+    temperatureOut[i] = newT;
 }

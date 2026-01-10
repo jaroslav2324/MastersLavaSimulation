@@ -71,7 +71,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
         }
     }
 
-    float maxDelta = 20.0f * h;
+    float maxDelta = 3.0f * h;
 
     float len = length(dpi);
     if (len > maxDelta)

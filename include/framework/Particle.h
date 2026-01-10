@@ -5,7 +5,7 @@
 
 struct SimParams
 {
-    float h = 0.05f;      // kernel radius
+    float h = 0.1f;       // kernel radius
     float h2;             // kernel radius squared
     float rho0 = 2800.0f; // rest density
     float mass = 1.0f;    // const, = 1
@@ -23,7 +23,7 @@ struct SimParams
 
     float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
     // TODO: Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
-    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
+    Vector3 gravityVec = Vector3(0.0f, -0.981f, 0.0f); // gravity (0, -9.81, 0)
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset
