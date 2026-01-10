@@ -59,8 +59,16 @@ public:
 
     D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(UINT index) const
     {
+        assert(m_gpuStart.ptr != 0 &&
+               "Attempt to get GPU handle from non-shader-visible heap");
+
         return {
             m_gpuStart.ptr + index * m_descriptorSize};
+    }
+
+    bool IsShaderVisible() const
+    {
+        return m_gpuStart.ptr != 0;
     }
 
     ID3D12DescriptorHeap *GetHeap() const
@@ -68,23 +76,9 @@ public:
         return m_heap.get();
     }
 
-    void CopyDescriptor(UINT srcIndex, UINT dstIndex)
+    D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const
     {
-        assert(dstIndex < m_capacity);
-        assert(srcIndex < m_capacity);
-
-        D3D12_CPU_DESCRIPTOR_HANDLE dst =
-            GetCpuHandle(dstIndex);
-
-        D3D12_CPU_DESCRIPTOR_HANDLE src =
-            GetCpuHandle(srcIndex);
-
-        m_device->CopyDescriptorsSimple(
-            1,     // num descriptors
-            dst,   // destination
-            src,   // source
-            m_type // heap type (SRV/UAV/CBV)
-        );
+        return m_type;
     }
 
 private:

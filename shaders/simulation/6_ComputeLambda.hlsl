@@ -1,6 +1,7 @@
+// #6
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predictedPositions : register(t1);
+StructuredBuffer<float3> predictedPositions : register(t7);
 StructuredBuffer<uint> particleIndecies : register(t4);
 StructuredBuffer<uint> cellStart : register(t5);
 StructuredBuffer<uint> cellEnd   : register(t6);

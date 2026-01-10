@@ -1,10 +1,11 @@
+// #1
 #include "CommonData.hlsl"
 
 StructuredBuffer<float3> gPositionsSrc     : register(t0);
 StructuredBuffer<uint>   particleIndices  : register(t4);
 
-RWStructuredBuffer<float3> gPredictedPositionsDst : register(u1);
-RWStructuredBuffer<float3> gVelocity           : register(u2);
+RWStructuredBuffer<float3> gPredictedPositionsDst : register(u7);
+RWStructuredBuffer<float3> gVelocity           : register(u1);
 
 [numthreads(256, 1, 1)]
 void CSMain(uint tid : SV_DispatchThreadID)

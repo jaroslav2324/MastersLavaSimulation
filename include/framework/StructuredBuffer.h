@@ -39,6 +39,7 @@ struct StructuredBuffer
         CreateUAV(device, alloc, uavIdx);
     }
 
+    // does not allocate memory in heap
     void CreateSRV(ID3D12Device *device, DescriptorAllocator &alloc, UINT srvIdx)
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
@@ -52,6 +53,7 @@ struct StructuredBuffer
         srvIndex = srvIdx;
     }
 
+    // does not allocate memory in heap
     void CreateUAV(ID3D12Device *device, DescriptorAllocator &alloc, UINT uavIdx)
     {
         D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};

@@ -1,8 +1,9 @@
+// #9
 #include "CommonData.hlsl"
 
 RWStructuredBuffer<float3> positions  : register(u0);
-RWStructuredBuffer<float3> predicted  : register(u1);
-RWStructuredBuffer<float3> velocities : register(u2);
+RWStructuredBuffer<float3> predicted  : register(u7);
+RWStructuredBuffer<float3> velocities : register(u1);
 StructuredBuffer<uint>     particleIndices : register(t4);
 
 static const float collisionvelocityDamping = 0.9f;

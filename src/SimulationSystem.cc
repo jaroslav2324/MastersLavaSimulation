@@ -150,7 +150,7 @@ void SimulationSystem::GenerateTemperaturesForPositions(const std::vector<Direct
 void SimulationSystem::Init(ID3D12Device *device)
 {
     // initialize simulation buffers (SRV/UAV descriptors)
-    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
+    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     InitSimulationBuffers(device, *alloc, m_maxParticlesCount, m_gridCellsCount);
 
     CreateSimulationRootSignature(device);
@@ -286,57 +286,58 @@ void SimulationSystem::Init(ID3D12Device *device)
 
 void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 {
-    CD3DX12_DESCRIPTOR_RANGE srvRange;
-    srvRange.Init(
+    CD3DX12_DESCRIPTOR_RANGE ranges[8];
+
+    // Ping-pong SRV / UAV (по 1 дескриптору!)
+    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0); // Position SRV
+    ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // Position UAV
+
+    ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1); // Velocity SRV
+    ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1); // Velocity UAV
+
+    ranges[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2); // Temperature SRV
+    ranges[5].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2); // Temperature UAV
+
+    // Non-ping-pong
+    ranges[6].Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
         static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots),
-        0);
+        3); // t3+
 
-    CD3DX12_DESCRIPTOR_RANGE uavRange;
-    uavRange.Init(
+    ranges[7].Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
         static_cast<UINT>(BufferUavIndex::NumberOfUavSlots),
-        0);
+        3); // u3+
 
-    CD3DX12_ROOT_PARAMETER rootParams[3];
+    CD3DX12_ROOT_PARAMETER rootParams[9];
 
-    rootParams[0].InitAsDescriptorTable(
-        1, &srvRange,
-        D3D12_SHADER_VISIBILITY_ALL);
+    for (int i = 0; i < 8; ++i)
+    {
+        rootParams[i].InitAsDescriptorTable(
+            1, &ranges[i], D3D12_SHADER_VISIBILITY_ALL);
+    }
 
-    rootParams[1].InitAsDescriptorTable(
-        1, &uavRange,
-        D3D12_SHADER_VISIBILITY_ALL);
+    rootParams[8].InitAsConstantBufferView(0); // b0
 
-    rootParams[2].InitAsConstantBufferView(
-        0, // b0
-        0,
-        D3D12_SHADER_VISIBILITY_ALL);
-
-    CD3DX12_ROOT_SIGNATURE_DESC rsDesc;
-    rsDesc.Init(
+    CD3DX12_ROOT_SIGNATURE_DESC desc;
+    desc.Init(
         _countof(rootParams),
         rootParams,
         0, nullptr,
         D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
-    winrt::com_ptr<ID3DBlob> serialized;
-    winrt::com_ptr<ID3DBlob> error;
-
+    winrt::com_ptr<ID3DBlob> blob, error;
     ThrowIfFailed(D3D12SerializeRootSignature(
-        &rsDesc,
+        &desc,
         D3D_ROOT_SIGNATURE_VERSION_1,
-        serialized.put(),
+        blob.put(),
         error.put()));
 
-    winrt::com_ptr<ID3D12RootSignature> rootSig;
     ThrowIfFailed(device->CreateRootSignature(
         0,
-        serialized->GetBufferPointer(),
-        serialized->GetBufferSize(),
-        IID_PPV_ARGS(rootSig.put())));
-
-    m_rootSignature = rootSig;
+        blob->GetBufferPointer(),
+        blob->GetBufferSize(),
+        IID_PPV_ARGS(m_rootSignature.put())));
 }
 
 void SimulationSystem::CreateSimulationKernels()
@@ -351,40 +352,40 @@ void SimulationSystem::CreateSimulationKernels()
     std::filesystem::path shaderBase = L"shaders/simulation";
 
     m_predictPositions = std::make_unique<SimulationKernels::PredictPositions>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"PredictPositions.hlsl", m_rootSignature);
-
-    m_cellHash = std::make_unique<SimulationKernels::CellHash>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"CellHash.hlsl", m_rootSignature);
-
-    m_hashToIndex = std::make_unique<SimulationKernels::HashToIndex>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"HashToIndex.hlsl", m_rootSignature);
-
-    m_computeDensity = std::make_unique<SimulationKernels::ComputeDensity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDensity.hlsl", m_rootSignature);
-
-    m_computeLambda = std::make_unique<SimulationKernels::ComputeLambda>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeLambda.hlsl", m_rootSignature);
-
-    m_computeDeltaPos = std::make_unique<SimulationKernels::ComputeDeltaPos>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ComputeDeltaPos.hlsl", m_rootSignature);
-
-    m_applyDeltaPos = std::make_unique<SimulationKernels::ApplyDeltaPos>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyDeltaPos.hlsl", m_rootSignature);
-
-    m_updatePosVel = std::make_unique<SimulationKernels::UpdatePositionVelocity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"UpdatePositionVelocity.hlsl", m_rootSignature);
-
-    m_viscosity = std::make_unique<SimulationKernels::Viscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"Viscosity.hlsl", m_rootSignature);
-
-    m_applyViscosity = std::make_unique<SimulationKernels::ApplyViscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"ApplyViscosity.hlsl", m_rootSignature);
-
-    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"HeatTransfer.hlsl", m_rootSignature);
+        devicePtr, devInfo, compileArgs, shaderBase / L"1_PredictPositions.hlsl", m_rootSignature);
 
     m_collisionProjection = std::make_unique<SimulationKernels::CollisionProjection>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"CollisionProjection.hlsl", m_rootSignature);
+        devicePtr, devInfo, compileArgs, shaderBase / L"2_CollisionProjection.hlsl", m_rootSignature);
+
+    m_cellHash = std::make_unique<SimulationKernels::CellHash>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"3_CellHash.hlsl", m_rootSignature);
+
+    m_hashToIndex = std::make_unique<SimulationKernels::HashToIndex>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"4_HashToIndex.hlsl", m_rootSignature);
+
+    m_computeDensity = std::make_unique<SimulationKernels::ComputeDensity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"5_ComputeDensity.hlsl", m_rootSignature);
+
+    m_computeLambda = std::make_unique<SimulationKernels::ComputeLambda>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"6_ComputeLambda.hlsl", m_rootSignature);
+
+    m_computeDeltaPos = std::make_unique<SimulationKernels::ComputeDeltaPos>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"7_ComputeDeltaPos.hlsl", m_rootSignature);
+
+    m_applyDeltaPos = std::make_unique<SimulationKernels::ApplyDeltaPos>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"8_ApplyDeltaPos.hlsl", m_rootSignature);
+
+    m_updatePosVel = std::make_unique<SimulationKernels::UpdatePositionVelocity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"9_UpdatePositionVelocity.hlsl", m_rootSignature);
+
+    m_viscosity = std::make_unique<SimulationKernels::Viscosity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"10_Viscosity.hlsl", m_rootSignature);
+
+    m_applyViscosity = std::make_unique<SimulationKernels::ApplyViscosity>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"11_ApplyViscosity.hlsl", m_rootSignature);
+
+    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"12_HeatTransfer.hlsl", m_rootSignature);
 
     m_oneSweep = std::make_unique<OneSweep>(devicePtr, devInfo, GPUSorting::ORDER_ASCENDING, GPUSorting::KEY_UINT32, GPUSorting::PAYLOAD_UINT32);
     m_oneSweep->SetAllBuffers(
@@ -410,19 +411,17 @@ CreateBuffer(
 
 void SimulationSystem::InitSimulationBuffers(
     ID3D12Device *device,
-    DescriptorAllocator &alloc,
+    DescriptorAllocator &allocGPU,
     UINT numParticles,
     UINT numCells)
 {
-    // Reserve descriptor table ranges that match the root signature
-    m_srvBase = alloc.AllocRange(static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots));
-    m_uavBase = alloc.AllocRange(static_cast<UINT>(BufferUavIndex::NumberOfUavSlots));
+    m_srvBase = allocGPU.AllocRange(static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots));
+    m_uavBase = allocGPU.AllocRange(static_cast<UINT>(BufferUavIndex::NumberOfUavSlots));
 
-    // Reserve ping-pong descriptor ranges for indirection
-    m_pingPongSrvBase = alloc.AllocRange(static_cast<UINT>(PingPongSrvIndex::NumberOfPingPongSrvSlots));
-    m_pingPongUavBase = alloc.AllocRange(static_cast<UINT>(PingPongUavIndex::NumberOfPingPongUavSlots));
+    // TODO: some memory is unused but i dont care
+    m_pingPongSrvBase = allocGPU.AllocRange(static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots));
+    m_pingPongUavBase = allocGPU.AllocRange(static_cast<UINT>(BufferUavIndex::NumberOfUavSlots));
 
-    // Create resources (no descriptors yet)
     for (int i = 0; i < 2; ++i)
     {
         particleSwapBuffers.position.buffers[i] = CreateBuffer(
@@ -441,7 +440,6 @@ void SimulationSystem::InitSimulationBuffers(
             sizeof(float));
     }
 
-    // Single buffers for scratch data (no ping-pong needed)
     particleScratchBuffers.predictedPosition = CreateBuffer(
         device,
         numParticles,
@@ -505,65 +503,56 @@ void SimulationSystem::InitSimulationBuffers(
             sizeof(uint32_t));
     }
 
-    // Create SRV/UAV descriptors using the reserved ranges.
-    particleSwapBuffers.position.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position0);
-    particleSwapBuffers.position.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position0);
+    particleSwapBuffers.position.buffers[0]->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Position);
+    particleSwapBuffers.position.buffers[0]->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Position);
 
-    // Predicted position (now in scratch buffers)
-    particleScratchBuffers.predictedPosition->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Position1);
-    particleScratchBuffers.predictedPosition->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Position1);
+    particleScratchBuffers.predictedPosition->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::PredictedPosition);
+    particleScratchBuffers.predictedPosition->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::PredictedPosition);
 
-    particleSwapBuffers.velocity.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Velocity);
-    particleSwapBuffers.velocity.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Velocity);
+    particleSwapBuffers.velocity.buffers[0]->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Velocity);
+    particleSwapBuffers.velocity.buffers[0]->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Velocity);
 
-    sortBuffers.hashBuffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ParticleHash);
-    sortBuffers.hashBuffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ParticleHash);
-    sortBuffers.indexBuffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::SortedIndices);
-    sortBuffers.indexBuffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::SortedIndices);
-    particleScratchBuffers.cellStart->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::CellStart);
-    particleScratchBuffers.cellStart->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::CellStart);
-    particleScratchBuffers.cellEnd->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::CellEnd);
-    particleScratchBuffers.cellEnd->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::CellEnd);
+    sortBuffers.hashBuffers[0]->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ParticleHash);
+    sortBuffers.hashBuffers[0]->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ParticleHash);
+    sortBuffers.indexBuffers[0]->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::SortedIndices);
+    sortBuffers.indexBuffers[0]->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::SortedIndices);
+    particleScratchBuffers.cellStart->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::CellStart);
+    particleScratchBuffers.cellStart->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::CellStart);
+    particleScratchBuffers.cellEnd->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::CellEnd);
+    particleScratchBuffers.cellEnd->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::CellEnd);
 
-    particleSwapBuffers.temperature.buffers[0]->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Temperature);
-    particleSwapBuffers.temperature.buffers[0]->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Temperature);
+    particleSwapBuffers.temperature.buffers[0]->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Temperature);
+    particleSwapBuffers.temperature.buffers[0]->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Temperature);
 
-    // Single scratch buffers (no ping-pong)
-    particleScratchBuffers.density->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Density);
-    particleScratchBuffers.density->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Density);
+    particleScratchBuffers.density->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Density);
+    particleScratchBuffers.density->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Density);
 
-    particleScratchBuffers.constraintC->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ConstraintC);
-    particleScratchBuffers.constraintC->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ConstraintC);
+    particleScratchBuffers.constraintC->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ConstraintC);
+    particleScratchBuffers.constraintC->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ConstraintC);
 
-    particleScratchBuffers.lambda->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::Lambda);
-    particleScratchBuffers.lambda->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::Lambda);
+    particleScratchBuffers.lambda->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Lambda);
+    particleScratchBuffers.lambda->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Lambda);
 
-    particleScratchBuffers.deltaP->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::DeltaP);
-    particleScratchBuffers.deltaP->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::DeltaP);
+    particleScratchBuffers.deltaP->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::DeltaP);
+    particleScratchBuffers.deltaP->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::DeltaP);
 
-    particleScratchBuffers.viscosityMu->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityMu);
-    particleScratchBuffers.viscosityMu->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityMu);
+    particleScratchBuffers.viscosityMu->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ViscosityMu);
+    particleScratchBuffers.viscosityMu->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ViscosityMu);
 
-    particleScratchBuffers.viscosityCoeff->CreateSRV(device, alloc, m_srvBase + BufferSrvIndex::ViscosityCoeff);
-    particleScratchBuffers.viscosityCoeff->CreateUAV(device, alloc, m_uavBase + BufferUavIndex::ViscosityCoeff);
+    particleScratchBuffers.viscosityCoeff->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ViscosityCoeff);
+    particleScratchBuffers.viscosityCoeff->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ViscosityCoeff);
 
-    // Create ping-pong descriptors for swap buffers (position, velocity, temperature)
-    particleSwapBuffers.position.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Position0);
-    particleSwapBuffers.position.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Position0);
-    particleSwapBuffers.position.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Position1);
-    particleSwapBuffers.position.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Position1);
+    // swap buffer
+    particleSwapBuffers.position.buffers[1]->CreateSRV(device, allocGPU, m_pingPongSrvBase + BufferSrvIndex::Position);
+    particleSwapBuffers.position.buffers[1]->CreateUAV(device, allocGPU, m_pingPongUavBase + BufferUavIndex::Position);
 
-    particleSwapBuffers.temperature.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Temperature0);
-    particleSwapBuffers.temperature.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Temperature0);
-    particleSwapBuffers.temperature.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Temperature1);
-    particleSwapBuffers.temperature.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Temperature1);
+    particleSwapBuffers.temperature.buffers[1]->CreateSRV(device, allocGPU, m_pingPongSrvBase + BufferSrvIndex::Temperature);
+    particleSwapBuffers.temperature.buffers[1]->CreateUAV(device, allocGPU, m_pingPongUavBase + BufferUavIndex::Temperature);
 
-    particleSwapBuffers.velocity.buffers[0]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Velocity0);
-    particleSwapBuffers.velocity.buffers[0]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Velocity0);
-    particleSwapBuffers.velocity.buffers[1]->CreateSRV(device, alloc, m_pingPongSrvBase + PingPongSrvIndex::Velocity1);
-    particleSwapBuffers.velocity.buffers[1]->CreateUAV(device, alloc, m_pingPongUavBase + PingPongUavIndex::Velocity1);
+    particleSwapBuffers.velocity.buffers[1]->CreateSRV(device, allocGPU, m_pingPongSrvBase + BufferSrvIndex::Velocity);
+    particleSwapBuffers.velocity.buffers[1]->CreateUAV(device, allocGPU, m_pingPongUavBase + BufferUavIndex::Velocity);
 
-    InitTemperatureBuffer(device, alloc, numParticles);
+    InitTemperatureBuffer(device, numParticles);
 }
 
 void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
@@ -601,7 +590,7 @@ void SimulationSystem::InitSortIndexBuffers(ID3D12Device *device, DescriptorAllo
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 }
 
-void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles)
+void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, UINT numParticles)
 {
     // prepare host data filled with 900.0f
     std::vector<float> hostTemps(numParticles, 900.0f);
@@ -637,10 +626,116 @@ void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, DescriptorAll
 }
 #pragma endregion
 
+// TODO: move somewhere
+#pragma region ROOT SIGNATURE SETTERS
+void SimulationSystem::SetPingPongBufferRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    const PingPongBuffer &buffer,
+    UINT rootSrvIndex,
+    UINT rootUavIndex,
+    DescriptorAllocator &allocGPU)
+{
+    auto readBuf = buffer.GetReadBuffer();
+    auto writeBuf = buffer.GetWriteBuffer();
+
+    cmdList->SetComputeRootDescriptorTable(
+        rootSrvIndex,
+        allocGPU.GetGpuHandle(readBuf->srvIndex));
+
+    cmdList->SetComputeRootDescriptorTable(
+        rootUavIndex,
+        allocGPU.GetGpuHandle(writeBuf->uavIndex));
+}
+
+void SimulationSystem::SetPositionPingPongRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    DescriptorAllocator &allocGPU)
+{
+    SetPingPongBufferRootSig(
+        cmdList,
+        particleSwapBuffers.position,
+        0, // root SRV
+        1, // root UAV
+        allocGPU);
+}
+
+void SimulationSystem::SetVelocityPingPongRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    DescriptorAllocator &allocGPU)
+{
+    SetPingPongBufferRootSig(
+        cmdList,
+        particleSwapBuffers.velocity,
+        2, // root SRV
+        3, // root UAV
+        allocGPU);
+}
+
+void SimulationSystem::SetTemperaturePingPongRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    DescriptorAllocator &allocGPU)
+{
+    SetPingPongBufferRootSig(
+        cmdList,
+        particleSwapBuffers.temperature,
+        4, // root SRV
+        5, // root UAV
+        allocGPU);
+}
+
+void SimulationSystem::SetOtherSrvsRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    DescriptorAllocator &allocGPU)
+{
+    // База SRV таблицы — фиксированная
+    UINT baseIndex = particleScratchBuffers.predictedPosition->srvIndex;
+
+    cmdList->SetComputeRootDescriptorTable(
+        6,
+        allocGPU.GetGpuHandle(baseIndex));
+}
+
+void SimulationSystem::SetOtherUavsRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    DescriptorAllocator &allocGPU)
+{
+    UINT baseIndex = particleScratchBuffers.predictedPosition->uavIndex;
+
+    cmdList->SetComputeRootDescriptorTable(
+        7,
+        allocGPU.GetGpuHandle(baseIndex));
+}
+
+void SimulationSystem::SetSimulationConstantRootSig(
+    ID3D12GraphicsCommandList *cmdList,
+    D3D12_GPU_VIRTUAL_ADDRESS cbAddress)
+{
+    cmdList->SetComputeRootConstantBufferView(8, cbAddress);
+}
+
+void SimulationSystem::SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU)
+{
+    ID3D12DescriptorHeap *heaps[] = {allocGPU.GetHeap()};
+    cmdList->SetDescriptorHeaps(1, heaps);
+
+    cmdList->SetComputeRootSignature(m_rootSignature.get());
+
+    SetPositionPingPongRootSig(cmdList, allocGPU);
+    SetVelocityPingPongRootSig(cmdList, allocGPU);
+    SetTemperaturePingPongRootSig(cmdList, allocGPU);
+
+    SetOtherSrvsRootSig(cmdList, allocGPU);
+    SetOtherUavsRootSig(cmdList, allocGPU);
+
+    SetSimulationConstantRootSig(
+        cmdList,
+        m_simParamsUpload->GetGPUVirtualAddress());
+}
+#pragma endregion
+
 #pragma region SIMULATE
 void SimulationSystem::Simulate(float dt)
 {
-    // update time step
     m_simParams.dt = dt;
 
     // copy updated SimParams into the upload constant buffer
@@ -650,29 +745,17 @@ void SimulationSystem::Simulate(float dt)
     memcpy(pData, &m_simParams, sizeof(SimParams));
     m_simParamsUpload->Unmap(0, nullptr);
 
-    // prepare command allocator and list
-    auto device = RenderSubsystem::GetDevice();
+    std::shared_ptr<DescriptorAllocator> allocGPU = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
+
+    winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
     winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
     ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
     ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
 
-    // set descriptor heaps (CBV/SRV/UAV heap used by StructuredBuffer descriptors)
-    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
-    ID3D12DescriptorHeap *heaps[] = {alloc->GetHeap()};
-    cmdList->SetDescriptorHeaps(1, heaps);
-
-    cmdList->SetComputeRootSignature(m_rootSignature.get());
-
-    cmdList->SetComputeRootDescriptorTable(0, alloc->GetGpuHandle(m_srvBase));
-    cmdList->SetComputeRootDescriptorTable(1, alloc->GetGpuHandle(m_uavBase));
-    cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
+    SetRootSigAndDescTables(cmdList.get(), *allocGPU);
 
     const uint32_t numParticles = static_cast<uint32_t>(m_simParams.numParticles);
-
-    // Swap position for read/write separation
-    particleSwapBuffers.position.Swap();
-    // TODO: copy descriptors?
 
     // 1) Predict positions
     m_predictPositions->Dispatch(cmdList, numParticles);
@@ -688,6 +771,7 @@ void SimulationSystem::Simulate(float dt)
     auto queue = RenderSubsystem::GetCommandQueue();
     queue->ExecuteCommandLists(1, lists);
 
+    // TODO: delete or not?
     // wait for completion
     winrt::com_ptr<ID3D12Fence> fence;
     ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
@@ -707,13 +791,8 @@ void SimulationSystem::Simulate(float dt)
     // TODO: probaply one list enough?
     ThrowIfFailed(cmdAlloc->Reset());
     ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
-    cmdList->SetDescriptorHeaps(1, heaps);
 
-    cmdList->SetComputeRootSignature(m_rootSignature.get());
-
-    cmdList->SetComputeRootDescriptorTable(0, alloc->GetGpuHandle(m_srvBase));
-    cmdList->SetComputeRootDescriptorTable(1, alloc->GetGpuHandle(m_uavBase));
-    cmdList->SetComputeRootConstantBufferView(2, m_simParamsUpload->GetGPUVirtualAddress());
+    SetRootSigAndDescTables(cmdList.get(), *allocGPU);
 
     // 5) (hash->cell start)
     m_hashToIndex->Dispatch(cmdList, numParticles);
@@ -721,24 +800,23 @@ void SimulationSystem::Simulate(float dt)
     // 6) PBF solver iterations
     for (int iter = 0; iter < 5; ++iter)
     {
-        // Compute density (single buffer, no ping-pong needed)
+        // Compute density
         m_computeDensity->Dispatch(cmdList, numParticles);
 
-        // Compute lambda (single buffer, no ping-pong needed)
+        // Compute lambda
         m_computeLambda->Dispatch(cmdList, numParticles);
 
-        // Compute position corrections (single buffer, no ping-pong needed)
+        // Compute position corrections
         m_computeDeltaPos->Dispatch(cmdList, numParticles);
 
-        // Apply corrections (in-place on predicted positions)
+        // Apply corrections
         m_applyDeltaPos->Dispatch(cmdList, numParticles);
     }
 
     // 7) Update positions and velocities (write to position and velocity dst buffers)
     m_updatePosVel->Dispatch(cmdList, numParticles);
-
-    // Swap velocity for read/write separation
     particleSwapBuffers.velocity.Swap();
+    SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // TODO: enable
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
@@ -747,11 +825,14 @@ void SimulationSystem::Simulate(float dt)
     // TODO: enable
     // 9) Apply viscosity to velocities
     // m_applyViscosity->Dispatch(cmdList, numParticles);
+    // particleSwapBuffers.velocity.Swap();
 
     // 10) Heat transfer (temperature diffusion)
     // Temperature uses ping-pong for read/write separation
     m_heatTransfer->Dispatch(cmdList, numParticles);
     particleSwapBuffers.temperature.Swap();
+
+    // particleSwapBuffers.position.Swap();
 
     // finalize remaining GPU work
     ThrowIfFailed(cmdList->Close());
@@ -775,14 +856,14 @@ void SimulationSystem::Simulate(float dt)
 #pragma region GETTERS
 D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetPositionBufferSRV()
 {
-    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
+    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     UINT idx = particleSwapBuffers.position.GetReadBuffer()->srvIndex;
     return alloc->GetGpuHandle(idx);
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetTemperatureBufferSRV()
 {
-    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocator();
+    auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     UINT idx = particleSwapBuffers.temperature.GetReadBuffer()->srvIndex;
     return alloc->GetGpuHandle(idx);
 }
@@ -793,8 +874,4 @@ UINT operator+(UINT offset, BufferSrvIndex index) { return offset + static_cast<
 UINT operator+(BufferSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
 UINT operator+(UINT offset, BufferUavIndex index) { return offset + static_cast<UINT>(index); };
 UINT operator+(BufferUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
-UINT operator+(UINT offset, PingPongSrvIndex index) { return offset + static_cast<UINT>(index); };
-UINT operator+(PingPongSrvIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
-UINT operator+(UINT offset, PingPongUavIndex index) { return offset + static_cast<UINT>(index); };
-UINT operator+(PingPongUavIndex index, UINT offset) { return static_cast<UINT>(index) + offset; };
 #pragma endregion

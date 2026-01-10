@@ -35,7 +35,8 @@ public:
 	// Wait helper: signals the provided fence with the given value and waits for completion
 	static void WaitForFence(ID3D12Fence *fence, uint64_t fenceValue);
 	static GPUSorting::DeviceInfo GetDeviceInfo() { return g_deviceInfo; };
-	static std::shared_ptr<DescriptorAllocator> GetCBVSRVUAVAllocator() { return m_cbvSrvUavAllocator; };
+	static std::shared_ptr<DescriptorAllocator> GetCBVSRVUAVAllocatorGPUVisible() { return m_cbvSrvUavAllocatorGPUVisible; };
+	static std::shared_ptr<DescriptorAllocator> GetCBVSRVUAVAllocatorCPU() { return m_cbvSrvUavAllocatorCPU; };
 	static winrt::com_ptr<ID3D12Device> GetDevice();
 
 private:
@@ -63,7 +64,10 @@ private:
 	inline static winrt::com_ptr<ID3D12DescriptorHeap> m_rtvHeap = nullptr;
 	inline static winrt::com_ptr<ID3D12DescriptorHeap> m_dsvHeap = nullptr;
 
-	inline static std::shared_ptr<DescriptorAllocator> m_cbvSrvUavAllocator = nullptr;
+	// cpu write only
+	inline static std::shared_ptr<DescriptorAllocator> m_cbvSrvUavAllocatorGPUVisible = nullptr;
+	// CPU read write
+	inline static std::shared_ptr<DescriptorAllocator> m_cbvSrvUavAllocatorCPU = nullptr;
 
 	inline static winrt::com_ptr<ID3D12CommandAllocator> m_commandAllocator = nullptr;
 	inline static winrt::com_ptr<ID3D12GraphicsCommandList> m_commandList = nullptr;

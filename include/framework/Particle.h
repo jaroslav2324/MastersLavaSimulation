@@ -35,19 +35,20 @@ struct SimParams
     float muMaxViscosity = 10.0f;       // maximum mu after clamp
     float muNormMaxViscosity = 1.0f;    // value of mu that maps to viscCoeff=1 (for normalization)
 
-    // TODO: init method
+    // TODO: init method?
 };
 
+// interface for shaders
 enum class BufferSrvIndex : UINT
 {
-    Position0 = 0,
-    Position1 = 1, // predicted
-    Velocity = 2,
+    Position = 0,
+    Velocity = 1,
+    Temperature = 2,
     ParticleHash = 3,
     SortedIndices = 4,
     CellStart = 5,
     CellEnd = 6,
-    Temperature = 7,
+    PredictedPosition = 7,
     Density = 8,
     ConstraintC = 9,
     Lambda = 10,
@@ -60,16 +61,17 @@ enum class BufferSrvIndex : UINT
 UINT operator+(UINT offset, BufferSrvIndex index);
 UINT operator+(BufferSrvIndex index, UINT offset);
 
+// interface for shaders
 enum class BufferUavIndex : UINT
 {
-    Position0 = 0,
-    Position1 = 1, // predicted
-    Velocity = 2,
+    Position = 0,
+    Velocity = 1,
+    Temperature = 2,
     ParticleHash = 3,
     SortedIndices = 4,
     CellStart = 5,
     CellEnd = 6,
-    Temperature = 7,
+    PredictedPosition = 7,
     Density = 8,
     ConstraintC = 9,
     Lambda = 10,
@@ -82,56 +84,23 @@ enum class BufferUavIndex : UINT
 UINT operator+(UINT offset, BufferUavIndex index);
 UINT operator+(BufferUavIndex index, UINT offset);
 
-// Ping-pong descriptor indices for indirection
-// These are allocated separately and copied into the main shader tables before dispatch
-enum class PingPongSrvIndex : UINT
-{
-    Position0 = 0,
-    Position1 = 1,
-    Temperature0 = 2,
-    Temperature1 = 3,
-    Velocity0 = 4,
-    Velocity1 = 5,
-    NumberOfPingPongSrvSlots = 6
-};
-
-enum class PingPongUavIndex : UINT
-{
-    Position0 = 0,
-    Position1 = 1,
-    Temperature0 = 2,
-    Temperature1 = 3,
-    Velocity0 = 4,
-    Velocity1 = 5,
-    NumberOfPingPongUavSlots = 6
-};
-
-UINT operator+(UINT offset, PingPongSrvIndex index);
-UINT operator+(PingPongSrvIndex index, UINT offset);
-
-UINT operator+(UINT offset, PingPongUavIndex index);
-UINT operator+(PingPongUavIndex index, UINT offset);
-
-// Ping-pong buffer structure for managing read/write indices
+// TODO: to separate header
 struct PingPongBuffer
 {
     std::shared_ptr<StructuredBuffer> buffers[2] = {nullptr, nullptr};
     UINT readIndex = 0;  // Index for reading (SRV)
     UINT writeIndex = 1; // Index for writing (UAV)
 
-    // Get the current read buffer
     std::shared_ptr<StructuredBuffer> GetReadBuffer() const
     {
         return buffers[readIndex];
     }
 
-    // Get the current write buffer
     std::shared_ptr<StructuredBuffer> GetWriteBuffer() const
     {
         return buffers[writeIndex];
     }
 
-    // Swap read and write indices
     void Swap()
     {
         std::swap(readIndex, writeIndex);
@@ -140,32 +109,23 @@ struct PingPongBuffer
 
 struct ParticleStateSwapBuffers
 {
-    // x_i (ping-pong for correct read/write separation)
-    PingPongBuffer position;
-
-    // v_i (ping-pong for correct read/write separation)
-    PingPongBuffer velocity;
-
-    // T_i (ping-pong for correct read/write separation)
-    PingPongBuffer temperature;
+    PingPongBuffer position;    // x_i
+    PingPongBuffer velocity;    // v_i
+    PingPongBuffer temperature; // T_i
 };
 
 struct ParticleScratchBuffers
 {
-    // q_i* (predicted position, single buffer, no ping-pong needed)
-    std::shared_ptr<StructuredBuffer> predictedPosition = nullptr;
+    std::shared_ptr<StructuredBuffer> predictedPosition = nullptr; // q_i*
 
-    //  PBF - single buffers (no ping-pong, written and read in same iteration)
     std::shared_ptr<StructuredBuffer> density = nullptr;     // ρ_i
     std::shared_ptr<StructuredBuffer> constraintC = nullptr; // C_i
     std::shared_ptr<StructuredBuffer> lambda = nullptr;      // λ_i
     std::shared_ptr<StructuredBuffer> deltaP = nullptr;      // Δp_i
 
-    // Viscosity - single buffers (written and read in same iteration)
     std::shared_ptr<StructuredBuffer> viscosityMu = nullptr;    // μ_i
     std::shared_ptr<StructuredBuffer> viscosityCoeff = nullptr; // normalized coeff
 
-    // Grid
     std::shared_ptr<StructuredBuffer> cellStart = nullptr; // per-cell
     std::shared_ptr<StructuredBuffer> cellEnd = nullptr;
 

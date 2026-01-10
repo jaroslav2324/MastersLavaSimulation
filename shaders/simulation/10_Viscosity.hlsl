@@ -1,10 +1,11 @@
+// #10
 #include "CommonData.hlsl"
 
 // Computes mu_i from log(log(mu+gamma)) = q - y*log(T)
 // mu = exp( A * T^{-y} ) - gamma,  A = exp(q)
 
 StructuredBuffer<uint>   particleIndices  : register(t4);
-StructuredBuffer<float> temperatureIn   : register(t7); // T_i
+StructuredBuffer<float> temperatureIn   : register(t2); // T_i
 
 RWStructuredBuffer<float> muOut        : register(u12); // μ_i result
 RWStructuredBuffer<float> viscCoeffOut : register(u13); // optional normalized coeff 0..1

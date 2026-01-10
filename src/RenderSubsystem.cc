@@ -43,8 +43,8 @@ void RenderSubsystem::Init()
 
     CreateGlobalConstantBuffer();
 
-    cube1.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocator, 1);
-    cube2.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocator, 2);
+    cube1.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocatorGPUVisible, 1);
+    cube2.CreateConstBuffer(m_device.get(), *m_cbvSrvUavAllocatorGPUVisible, 2);
 
     CreateRootSignatureAndPipeline();
 
@@ -94,8 +94,8 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
     cbvDesc.BufferLocation = m_globalCBAddress;
     cbvDesc.SizeInBytes = (sizeof(GlobalConstants) + 255) & ~255;
     // allocate a slot in the CBV/SRV/UAV allocator and write CBV there
-    UINT cbIndex = m_cbvSrvUavAllocator->Alloc();
-    m_globalCBV = m_cbvSrvUavAllocator->GetCpuHandle(cbIndex);
+    UINT cbIndex = m_cbvSrvUavAllocatorGPUVisible->Alloc();
+    m_globalCBV = m_cbvSrvUavAllocatorGPUVisible->GetCpuHandle(cbIndex);
     m_device->CreateConstantBufferView(&cbvDesc, m_globalCBV);
 }
 
@@ -348,8 +348,11 @@ void RenderSubsystem::CreateDescriptorHeaps()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create DSV descriptor heap.");
 
-    m_cbvSrvUavAllocator = std::make_shared<DescriptorAllocator>();
-    m_cbvSrvUavAllocator->Init(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, true);
+    m_cbvSrvUavAllocatorGPUVisible = std::make_shared<DescriptorAllocator>();
+    m_cbvSrvUavAllocatorGPUVisible->Init(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, true);
+
+    m_cbvSrvUavAllocatorCPU = std::make_shared<DescriptorAllocator>();
+    m_cbvSrvUavAllocatorCPU->Init(m_device.get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256, false);
 
     m_rtvHeapStart = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     m_dsvHeapStart = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -507,9 +510,9 @@ void RenderSubsystem::Draw()
     m_commandList->SetGraphicsRootSignature(m_rootSignature.get());
 
     UpdateGlobalConstantBuffer();
-    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavAllocator->GetHeap()};
+    ID3D12DescriptorHeap *heaps[] = {m_cbvSrvUavAllocatorGPUVisible->GetHeap()};
     m_commandList->SetDescriptorHeaps(1, heaps);
-    m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavAllocator->GetHeap()->GetGPUDescriptorHandleForHeapStart());
+    m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvUavAllocatorGPUVisible->GetHeap()->GetGPUDescriptorHandleForHeapStart());
 
     // --- Draw cubes ---
     // Use cube pipeline (vertex/index draw with POSITION float4 input)

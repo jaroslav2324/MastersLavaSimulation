@@ -47,9 +47,21 @@ public:
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
     static void CreateSimulationKernels();
-    static void InitSimulationBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles, UINT numCells);
-    static void InitTemperatureBuffer(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
+    static void InitSimulationBuffers(ID3D12Device *device, DescriptorAllocator &allocGPU, UINT numParticles, UINT numCells);
+    static void InitTemperatureBuffer(ID3D12Device *device, UINT numParticles);
     static void InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
+
+    static void SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    // descriptor tables
+    static void SetPingPongBufferRootSig(ID3D12GraphicsCommandList *cmdList, const PingPongBuffer &buffer,
+                                         UINT rootSrvIndex, UINT rootUavIndex, DescriptorAllocator &allocGPU);
+    static void SetPositionPingPongRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    static void SetVelocityPingPongRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    static void SetTemperaturePingPongRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    static void SetOtherSrvsRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    static void SetOtherUavsRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
+    // cbv
+    static void SetSimulationConstantRootSig(ID3D12GraphicsCommandList *cmdList, D3D12_GPU_VIRTUAL_ADDRESS cbAddress);
 
     inline static SimParams m_simParams = {};
     inline static winrt::com_ptr<ID3D12Resource> m_simParamsUpload = nullptr;

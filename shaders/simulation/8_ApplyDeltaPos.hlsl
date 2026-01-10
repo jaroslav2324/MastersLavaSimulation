@@ -1,8 +1,9 @@
+// #8
 #include "CommonData.hlsl"
 
 StructuredBuffer<uint> particleIndices : register(t4);
 
-RWStructuredBuffer<float3> predicted : register(u1); // q_i*
+RWStructuredBuffer<float3> predicted : register(u7); // q_i*
 RWStructuredBuffer<float3> deltaP    : register(u11); // Δp_i
 
 // TODO: move to ComputeDeltaPos.hlsl?
