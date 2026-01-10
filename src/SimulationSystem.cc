@@ -288,7 +288,6 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 {
     CD3DX12_DESCRIPTOR_RANGE ranges[8];
 
-    // Ping-pong SRV / UAV (по 1 дескриптору!)
     ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0); // Position SRV
     ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // Position UAV
 
@@ -298,15 +297,14 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
     ranges[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2); // Temperature SRV
     ranges[5].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2); // Temperature UAV
 
-    // Non-ping-pong
     ranges[6].Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-        static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots),
+        static_cast<UINT>(BufferSrvIndex::NumberOfSrvSlots) - 3,
         3); // t3+
 
     ranges[7].Init(
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-        static_cast<UINT>(BufferUavIndex::NumberOfUavSlots),
+        static_cast<UINT>(BufferUavIndex::NumberOfUavSlots) - 3,
         3); // u3+
 
     CD3DX12_ROOT_PARAMETER rootParams[9];
@@ -651,12 +649,22 @@ void SimulationSystem::SetPositionPingPongRootSig(
     ID3D12GraphicsCommandList *cmdList,
     DescriptorAllocator &allocGPU)
 {
-    SetPingPongBufferRootSig(
-        cmdList,
-        particleSwapBuffers.position,
-        0, // root SRV
-        1, // root UAV
-        allocGPU);
+    // SetPingPongBufferRootSig(
+    //     cmdList,
+    //     particleSwapBuffers.position,
+    //     0, // root SRV
+    //     1, // root UAV
+    //     allocGPU);
+
+    auto buf = particleSwapBuffers.position.GetReadBuffer();
+
+    cmdList->SetComputeRootDescriptorTable(
+        0,
+        allocGPU.GetGpuHandle(buf->srvIndex));
+
+    cmdList->SetComputeRootDescriptorTable(
+        1,
+        allocGPU.GetGpuHandle(buf->uavIndex));
 }
 
 void SimulationSystem::SetVelocityPingPongRootSig(
@@ -814,8 +822,8 @@ void SimulationSystem::Simulate(float dt)
 
     // 7) Update positions and velocities (write to position and velocity dst buffers)
     m_updatePosVel->Dispatch(cmdList, numParticles);
-    particleSwapBuffers.velocity.Swap();
-    SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
+    // particleSwapBuffers.velocity.Swap();
+    // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // TODO: enable
     // 8) Viscosity: compute viscosity mu and coefficient from temperature

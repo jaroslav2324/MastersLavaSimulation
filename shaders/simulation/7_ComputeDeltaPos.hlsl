@@ -63,7 +63,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float3 gradW = cubic_kernel_gradient(rij);
             float lj = lambda[j];
 
-            // --- tensile instability correction ---
+            // tensile instability correction
             float W = cubic_kernel_height(rij);
             float scorr = -kTensile * pow(W / Wdq, nTensile);
 
@@ -71,7 +71,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
         }
     }
 
-    float maxDelta = 0.5f * h;
+    float maxDelta = 20.0f * h;
 
     float len = length(dpi);
     if (len > maxDelta)

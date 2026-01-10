@@ -65,5 +65,5 @@ void CSMain(uint gid : SV_DispatchThreadID)
     sumGrad2 += dot(grad_i, grad_i);
 
     float lam = -Ci / (sumGrad2 + eps);
-    lambda[i] = clamp(lam, -lambdaMax, lambdaMax);
+    lambda[i] = lam; // clamp(lam, -lambdaMax, lambdaMax);
 }

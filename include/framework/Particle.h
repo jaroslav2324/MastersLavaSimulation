@@ -23,7 +23,7 @@ struct SimParams
 
     float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
     // TODO: Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
-    Vector3 gravityVec = Vector3(0.0f, -0.0981f, 0.0f); // gravity (0, -9.81, 0)
+    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset
@@ -109,7 +109,7 @@ struct PingPongBuffer
 
 struct ParticleStateSwapBuffers
 {
-    PingPongBuffer position;    // x_i
+    PingPongBuffer position;    // x_i // !!! fake, it is no swap
     PingPongBuffer velocity;    // v_i
     PingPongBuffer temperature; // T_i
 };
