@@ -542,7 +542,7 @@ void SimulationSystem::InitSimulationBuffers(
     particleScratchBuffers.viscosityCoeff->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ViscosityCoeff);
     particleScratchBuffers.viscosityCoeff->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ViscosityCoeff);
 
-    // swap buffer
+    // swap buffers
     particleSwapBuffers.position.buffers[1]->CreateSRV(device, allocGPU, m_pingPongSrvBase + BufferSrvIndex::Position);
     particleSwapBuffers.position.buffers[1]->CreateUAV(device, allocGPU, m_pingPongUavBase + BufferUavIndex::Position);
 
@@ -687,8 +687,7 @@ void SimulationSystem::SetOtherSrvsRootSig(
     ID3D12GraphicsCommandList *cmdList,
     DescriptorAllocator &allocGPU)
 {
-    // База SRV таблицы — фиксированная
-    UINT baseIndex = particleScratchBuffers.predictedPosition->srvIndex;
+    UINT baseIndex = sortBuffers.hashBuffers[0]->srvIndex;
 
     cmdList->SetComputeRootDescriptorTable(
         6,
@@ -699,7 +698,7 @@ void SimulationSystem::SetOtherUavsRootSig(
     ID3D12GraphicsCommandList *cmdList,
     DescriptorAllocator &allocGPU)
 {
-    UINT baseIndex = particleScratchBuffers.predictedPosition->uavIndex;
+    UINT baseIndex = sortBuffers.hashBuffers[0]->uavIndex;
 
     cmdList->SetComputeRootDescriptorTable(
         7,
@@ -748,9 +747,12 @@ void SimulationSystem::Simulate(float dt)
     std::shared_ptr<DescriptorAllocator> allocGPU = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
 
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
+
+    // TODO: do not create allocator and list each frame
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
     winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
     ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
+    ThrowIfFailed(cmdAlloc->Reset());
     ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.get(), nullptr, IID_PPV_ARGS(cmdList.put())));
 
     SetRootSigAndDescTables(cmdList.get(), *allocGPU);
@@ -770,6 +772,7 @@ void SimulationSystem::Simulate(float dt)
     ID3D12CommandList *lists[] = {cmdList.get()};
     auto queue = RenderSubsystem::GetCommandQueue();
     queue->ExecuteCommandLists(1, lists);
+    ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
 
     // TODO: delete or not?
     // wait for completion
@@ -787,10 +790,6 @@ void SimulationSystem::Simulate(float dt)
 
     // 4) Configure OneSweep to use our hash/index buffers and sort
     m_oneSweep->Sort();
-
-    // TODO: probaply one list enough?
-    ThrowIfFailed(cmdAlloc->Reset());
-    ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
 
     SetRootSigAndDescTables(cmdList.get(), *allocGPU);
 
@@ -838,6 +837,7 @@ void SimulationSystem::Simulate(float dt)
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists2[] = {cmdList.get()};
     queue->ExecuteCommandLists(1, lists2);
+    ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
 
     // wait for final completion
     fenceVal++;
