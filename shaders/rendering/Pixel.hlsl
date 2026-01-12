@@ -23,29 +23,18 @@ static const float Tmax = 1500.0;
 float3 TempToLavaColor(float temperatureK)
 {
     float t = clamp(temperatureK, Tmin, Tmax);
-
     float u = (t - Tmin) / (Tmax - Tmin);
 
+    // Map to LUT space
     float fIndex = u * (LavaLUTSize - 1);
-    uint index = (uint)fIndex;
 
-    return LavaColorLUT[index];
+    uint index0 = (uint)floor(fIndex);
+    uint index1 = min(index0 + 1, LavaLUTSize - 1);
+
+    float frac = fIndex - index0;
+
+    return lerp(LavaColorLUT[index0], LavaColorLUT[index1], frac);
 }
-
-// float3 TempToLavaColorSmooth(float temperatureK)
-// {
-//     const float Tmin = 500.0;
-//     const float Tmax = 1500.0;
-//     float t = clamp(temperatureK, Tmin, Tmax);
-//     float u = (t - Tmin) / (Tmax - Tmin);
-//     float fIndex = u * (LavaLUTSize - 1);
-//     uint i0 = (uint)fIndex;
-//     uint i1 = min(i0 + 1, LavaLUTSize - 1);
-//     float frac = frac(fIndex);
-//     // очень мягкая интерполяция
-//     frac = smoothstep(0.0, 1.0, frac);
-//     return lerp(LavaColorLUT[i0], LavaColorLUT[i1], frac);
-// }
 
 float4 PSMain(VSOut i) : SV_Target
 {

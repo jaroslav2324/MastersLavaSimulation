@@ -11,6 +11,9 @@ StructuredBuffer<float>  temperatureIn       : register(t2);
 
 RWStructuredBuffer<float> temperatureOut     : register(u2);
 
+static const float Tenv = 300.0f;        // воздух TODO: в параметры симуляции
+static const float heatLossCoeff = 10.0f; // TODO: в параметры симуляции
+
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
@@ -51,19 +54,21 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float3 rij = pi - pj;
 
             float r2 = dot(rij, rij);
-            if (r2 >= h2 || r2 < 1e-12)
+            // TODO: move increased kernel radius to params
+            if (r2 >= 25.0f * h2)
                 continue;
 
             float Tj = temperatureIn[j];
             float rhoj = max(density[j], 1e-6);
             float kj = GetThermalConductivity(Tj);
 
-            float3 gradW = cubic_kernel_gradient(rij);
+            // TODO: move increased kernel radius to params
+            float3 gradW = - 5.0f * cubic_kernel_gradient(rij / 5.0f);
 
             float dotTerm = dot(rij, gradW);
             float denom   = r2 + epsHeatTransfer;
 
-            float kij = (2.0 * ki * kj) / max(ki + kj, 1e-6);
+            float kij = (2.0 * ki * kj) / (ki + kj);
 
             float contrib =
                 mass *
@@ -72,14 +77,23 @@ void CSMain(uint gid : SV_DispatchThreadID)
                 dotTerm /
                 (rhoi * rhoj * denom);
 
-            dTdt += clamp(contrib, -1.0, 1.0);
+            // TODO: analyze is ot ok
+            dTdt += clamp(contrib, -0.01, 0.01);
         }
     }
 
-    float newT = Ti + dt * dTdt;
+    float exposure = saturate((rho0 - rhoi) / rho0);
+    exposure = pow(exposure, 1.5); 
 
-    // optional clamp (physical bounds)
-    //newT = clamp(newT, 0.0f, 2000.0f);
+    float heatLoss =
+        heatLossCoeff *
+        exposure *
+        (Ti - Tenv);
+
+    dTdt -= heatLoss;
+
+    // TODO: needed clamp of delta?
+    float newT = Ti + dt * dTdt;
 
     temperatureOut[i] = newT;
 }
