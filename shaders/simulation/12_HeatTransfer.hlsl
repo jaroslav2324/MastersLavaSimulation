@@ -12,7 +12,7 @@ StructuredBuffer<float>  temperatureIn       : register(t2);
 RWStructuredBuffer<float> temperatureOut     : register(u2);
 
 static const float Tenv = 300.0f;        // воздух TODO: в параметры симуляции
-static const float heatLossCoeff = 10.0f; // TODO: в параметры симуляции
+static const float heatLossCoeff = 5.0f; // TODO: в параметры симуляции
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -92,8 +92,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     dTdt -= heatLoss;
 
-    // TODO: needed clamp of delta?
-    float newT = Ti + dt * dTdt;
+    // TODO: to params?
+    float newT = clamp(Ti + dt * dTdt, 0.01f, 2000.0f);
 
     temperatureOut[i] = newT;
 }

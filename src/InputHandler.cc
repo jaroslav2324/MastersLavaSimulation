@@ -1,6 +1,9 @@
+#include "pch.h"
 #include "framework/InputHandler.h"
-#include <iostream>
-#include <SimpleMath.h>
+
+#include <Windows.h>
+
+#include "framework/SimulationSystem.h"
 
 InputHandler::InputHandler()
 {
@@ -76,10 +79,24 @@ void InputHandler::ProcessInput(float deltaSeconds, Camera &camera)
         moveDelta -= right;
     if (m_keys['D'])
         moveDelta += right;
-    if (m_keys[VK_SPACE])
+    if (m_keys['E'])
         moveDelta += up;
-    if (m_keys[VK_CONTROL])
+    if (m_keys['Q'])
         moveDelta -= up;
+
+    static float timeout;
+    static bool runSimulation;
+    timeout += deltaSeconds;
+
+    if (m_keys[VK_SPACE])
+    {
+        if (timeout > 0.5f)
+        {
+            SimulationSystem::SetSimulationRunning(runSimulation);
+            runSimulation = !runSimulation;
+            timeout = 0.0f;
+        }
+    }
 
     Vector3 camPos = camera.GetPosition();
     if (moveDelta.Length() > 0.0f)

@@ -1,10 +1,6 @@
 #pragma once
 
-#include <Windows.h>
-#include <SimpleMath.h>
 #include "Camera.h"
-
-using namespace DirectX::SimpleMath;
 
 class InputHandler
 {

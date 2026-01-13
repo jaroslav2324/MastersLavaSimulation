@@ -1,4 +1,8 @@
+#include "pch.h"
+
 #include "framework/Camera.h"
+
+using namespace DirectX::SimpleMath;
 
 Camera::Camera()
 {

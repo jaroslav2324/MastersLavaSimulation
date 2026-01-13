@@ -25,10 +25,9 @@ public:
     SimulationSystem() = delete;
     static void Init(ID3D12Device *device);
 
-    static void SwapParticleBuffers() // TODO: is this needed?
-    {
-        m_currentSwapIndex = (m_currentSwapIndex + 1) % 2;
-    }
+    static void SetSimulationRunning(bool isRunningIn) { isRunning = isRunningIn; };
+    static void StartSimulation() { isRunning = true; };
+    static void StopSimulation() { isRunning = false; };
 
     static void Simulate(float dt);
 
@@ -100,4 +99,6 @@ private:
     inline static ParticleStateSwapBuffers particleSwapBuffers;
     inline static ParticleScratchBuffers particleScratchBuffers;
     inline static SortBuffers sortBuffers;
+
+    inline static bool isRunning = false;
 };

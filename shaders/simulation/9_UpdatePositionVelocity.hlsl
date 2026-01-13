@@ -6,7 +6,7 @@ RWStructuredBuffer<float3> predicted  : register(u7);
 RWStructuredBuffer<float3> velocities : register(u1);
 StructuredBuffer<uint>     particleIndices : register(t4);
 
-static const float collisionvelocityDamping = 0.9f;
+static const float collisionvelocityDamping = 0.2f;
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)

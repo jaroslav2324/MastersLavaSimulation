@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "framework/SimulationSystem.h"
 #include "framework/RenderTemplatesAPI.h"
 #include "framework/ShaderCompiler.h"
@@ -58,25 +60,22 @@ std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDenseBottomW
     std::vector<DirectX::SimpleMath::Vector3> out;
     out.reserve(numParticles);
     std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 1.0f);
+    std::uniform_real_distribution<float> u(0.0f, 5.0f);
 
     // Allocate fraction of particles to sphere at top-center
     const UINT sphereCount = static_cast<UINT>(std::round(numParticles * 0.18f));
     const UINT bottomCount = numParticles - sphereCount;
 
-    // Dense bottom: bias y downward using pow to cluster near 0
     for (UINT i = 0; i < bottomCount; ++i)
     {
         float x = u(rng);
         float z = u(rng);
-        // bias towards bottom (y in [0,1], 0 = bottom)
-        float y = std::pow(u(rng), 2.0f); // square to bias low
+        float y = u(rng) / 5.0f;
         out.emplace_back(x, y, z);
     }
 
-    // Sphere at top-center
-    DirectX::SimpleMath::Vector3 center(0.5f, 0.82f, 0.5f);
-    const float radius = 0.12f;
+    DirectX::SimpleMath::Vector3 center(2.5f, 2.82f, 2.5f);
+    const float radius = 1.0f;
     std::uniform_real_distribution<float> uSphere(-radius, radius);
     while (out.size() < numParticles)
     {
@@ -86,18 +85,14 @@ std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDenseBottomW
         if (rx * rx + ry * ry + rz * rz <= radius * radius)
         {
             DirectX::SimpleMath::Vector3 p = center + DirectX::SimpleMath::Vector3(rx, ry, rz);
-            // clamp to [0,1]
-            p.x = std::min(1.0f, std::max(0.0f, p.x));
-            p.y = std::min(1.0f, std::max(0.0f, p.y));
-            p.z = std::min(1.0f, std::max(0.0f, p.z));
             out.push_back(p);
         }
     }
 
     return out;
 }
-// TODO: cringe but okay for now
 
+// TODO: cringe but okay for now
 void SimulationSystem::GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps)
 {
     outTemps.clear();
@@ -747,6 +742,11 @@ void SimulationSystem::SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdLis
 static winrt::com_ptr<ID3D12Fence> fence = nullptr;
 void SimulationSystem::Simulate(float dt)
 {
+    if (!isRunning)
+    {
+        return;
+    }
+
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 
     static int fenceVal;
@@ -838,13 +838,11 @@ void SimulationSystem::Simulate(float dt)
     UAVBarrierSingle(cmdList, particleSwapBuffers.position.GetWriteBuffer()->resource);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
 
-    // TODO: enable
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
-    // m_viscosity->Dispatch(cmdList, numParticles);
+    m_viscosity->Dispatch(cmdList, numParticles);
 
-    // TODO: enable
     // 9) Apply viscosity to velocities
-    // m_applyViscosity->Dispatch(cmdList, numParticles);
+    m_applyViscosity->Dispatch(cmdList, numParticles);
     // particleSwapBuffers.velocity.Swap();
     // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
