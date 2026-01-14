@@ -840,10 +840,12 @@ void SimulationSystem::Simulate(float dt)
 
     // 8) Viscosity: compute viscosity mu and coefficient from temperature
     m_viscosity->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleScratchBuffers.viscosityCoeff->resource);
 
     // 9) Apply viscosity to velocities
     m_applyViscosity->Dispatch(cmdList, numParticles);
-    // particleSwapBuffers.velocity.Swap();
+    UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
+    particleSwapBuffers.velocity.Swap();
     // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // 10) Heat transfer (temperature diffusion)

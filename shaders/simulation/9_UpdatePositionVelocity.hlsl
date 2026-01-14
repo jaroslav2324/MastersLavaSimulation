@@ -21,12 +21,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
     float3 worldMin = worldOrigin;
     float3 worldMax = worldOrigin + float3(gridResolution) * cellSize;
 
-    // Optional margin (particle radius)
-    float margin = 0.5 * h;
-
-    worldMin += margin;
-    worldMax -= margin;
-
     float3 v = (x_new - x_old) / dt;
 
     // --- X axis ---
