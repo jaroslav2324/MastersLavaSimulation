@@ -92,59 +92,32 @@ std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDenseBottomW
     return out;
 }
 
-// TODO: cringe but okay for now
-void SimulationSystem::GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps)
+void SimulationSystem::GenerateTemperaturesForPositions(
+    const std::vector<DirectX::SimpleMath::Vector3> &positions,
+    std::vector<float> &outTemps)
 {
+    const float hotHeight = 1.8f; // TODO: can be moved to args
+
     outTemps.clear();
     outTemps.reserve(positions.size());
 
     std::mt19937 rngTemp(424242);
-    std::uniform_real_distribution<float> d700_1000(700.0f, 1000.0f);
-    std::uniform_real_distribution<float> d900_1000(900.0f, 1000.0f);
-    std::uniform_real_distribution<float> d1300_1400(1300.0f, 1400.0f);
 
-    // Detect if this is the dense-bottom-with-sphere scene by presence of points inside the known sphere region
-    DirectX::SimpleMath::Vector3 sphereCenter(0.5f, 0.82f, 0.5f);
-    const float sphereRadius = 0.12f;
-    bool hasSphere = false;
+    std::uniform_real_distribution<float> coldRange(700.0f, 900.0f);
+    std::uniform_real_distribution<float> hotRange(1200.0f, 1400.0f);
+
     for (const auto &p : positions)
     {
-        float dx = p.x - sphereCenter.x;
-        float dy = p.y - sphereCenter.y;
-        float dz = p.z - sphereCenter.z;
-        if (dx * dx + dy * dy + dz * dz <= sphereRadius * sphereRadius)
-        {
-            hasSphere = true;
-            break;
-        }
-    }
-
-    if (hasSphere)
-    {
-        for (const auto &p : positions)
-        {
-            float dx = p.x - sphereCenter.x;
-            float dy = p.y - sphereCenter.y;
-            float dz = p.z - sphereCenter.z;
-            if (dx * dx + dy * dy + dz * dz <= sphereRadius * sphereRadius)
-                outTemps.push_back(d1300_1400(rngTemp));
-            else if (p.y < 0.45f)
-                outTemps.push_back(d900_1000(rngTemp));
-            else
-                outTemps.push_back(d700_1000(rngTemp));
-        }
-    }
-    else
-    {
-        for (size_t i = 0; i < positions.size(); ++i)
-            outTemps.push_back(d700_1000(rngTemp));
+        if (p.y >= hotHeight)
+            outTemps.push_back(hotRange(rngTemp));
+        else
+            outTemps.push_back(coldRange(rngTemp));
     }
 }
 
 #pragma region INIT
 void SimulationSystem::Init(ID3D12Device *device)
 {
-    // initialize simulation buffers (SRV/UAV descriptors)
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     InitSimulationBuffers(device, *alloc, m_maxParticlesCount, m_gridCellsCount);
 
@@ -190,11 +163,6 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     CreateSimulationKernels();
 
-    // Generate initial particle positions. Use one of the helper generators below.
-    // Options:
-    //  - GenerateUniformGridPositions(m_maxParticlesCount)
-    //  - GenerateDenseRandomPositions(m_maxParticlesCount)
-    //  - GenerateDenseBottomWithSphere(m_maxParticlesCount)  <-- default
     std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateDenseBottomWithSphere(m_maxParticlesCount);
 
     // create upload buffer and copy positions into GPU position buffers using one command list
@@ -336,10 +304,11 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 void SimulationSystem::CreateSimulationKernels()
 {
     GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
-    std::vector<std::wstring> compileArgs = {
-        DXC_ARG_DEBUG,
-        DXC_ARG_SKIP_OPTIMIZATIONS,
-        L"-Qembed_debug"};
+    // std::vector<std::wstring> compileArgs = {
+    //     DXC_ARG_DEBUG,
+    //     DXC_ARG_SKIP_OPTIMIZATIONS,
+    //     L"-Qembed_debug"};
+    std::vector<std::wstring> compileArgs = {DXC_ARG_OPTIMIZATION_LEVEL3};
 
     auto devicePtr = RenderSubsystem::GetDevice();
     std::filesystem::path shaderBase = L"shaders/simulation";
@@ -849,18 +818,15 @@ void SimulationSystem::Simulate(float dt)
     // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // 10) Heat transfer (temperature diffusion)
-    // Temperature uses ping-pong for read/write separation
     m_heatTransfer->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.temperature.GetWriteBuffer()->resource);
     particleSwapBuffers.temperature.Swap();
 
-    // finalize remaining GPU work
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists2[] = {cmdList.get()};
     queue->ExecuteCommandLists(1, lists2);
     ThrowIfFailed(cmdList->Reset(cmdAlloc.get(), nullptr));
 
-    // wait for final completion
     fenceVal++;
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 }

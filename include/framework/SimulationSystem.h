@@ -25,6 +25,7 @@ public:
     SimulationSystem() = delete;
     static void Init(ID3D12Device *device);
 
+    static bool IsRunning() { return isRunning; };
     static void SetSimulationRunning(bool isRunningIn) { isRunning = isRunningIn; };
     static void StartSimulation() { isRunning = true; };
     static void StopSimulation() { isRunning = false; };

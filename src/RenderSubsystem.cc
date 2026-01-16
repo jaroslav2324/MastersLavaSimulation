@@ -16,8 +16,8 @@ winrt::com_ptr<ID3D12Device> RenderSubsystem::GetDevice()
 
 void RenderSubsystem::Init()
 {
-    m_width = 800;
-    m_height = 600;
+    m_width = 1920;
+    m_height = 1080;
     m_windowHandle = CreateMainWindow(GetModuleHandle(nullptr), (int)m_width, (int)m_height, L"DX12 Window");
 
     CreateDevice();
@@ -517,10 +517,10 @@ void RenderSubsystem::Draw()
 
     // --- Draw cubes ---
     // Use cube pipeline (vertex/index draw with POSITION float4 input)
-    m_commandList->SetPipelineState(m_cubePipelineState.get());
+    // m_commandList->SetPipelineState(m_cubePipelineState.get());
     // cube.Draw will set its per-object CBV (root param 1) and issue DrawIndexed
-    cube1.Draw(m_commandList.get());
-    cube2.Draw(m_commandList.get());
+    // cube1.Draw(m_commandList.get());
+    // cube2.Draw(m_commandList.get());
 
     // --- Draw particles ---
     // Use particle pipeline (VS generates quads via SV_VertexID/SV_InstanceID)
@@ -549,7 +549,7 @@ void RenderSubsystem::Draw()
 
     m_swapChain->Present(1, 0);
 
-    // Wait for GPU (simple sync)
+    // TODO: use wait for fence?
     m_fenceValue++;
     m_commandQueue->Signal(m_fence.get(), m_fenceValue);
     if (m_fence->GetCompletedValue() < m_fenceValue)
