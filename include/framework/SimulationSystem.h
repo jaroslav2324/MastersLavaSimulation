@@ -37,6 +37,10 @@ public:
     static uint32_t GetNumParticles() { return m_simParams.numParticles; }
     static float GetKernelRadius() { return m_simParams.h; }
 
+    // GPU sync helpers for render-simulation coordination
+    static uint64_t GetLastSimulateFenceValue();
+    static ID3D12Fence *GetSimulateFence();
+
     // Particle initialization helpers
     static std::vector<DirectX::SimpleMath::Vector3> GenerateUniformGridPositions(UINT numParticles);
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseBottomWithSphere(UINT numParticles);
@@ -94,7 +98,10 @@ private:
     inline static UINT m_pingPongUavBase = 0;
 
     const static int m_gridCellsCount = 1 << 12;
-    const static int m_maxParticlesCount = 1 << 15; // TODO: move to params?
+    // NOTE: OneSweep partitionSize for this GPU is 7680. At exactly 8192 (= 7680 + 512),
+    // the second partition is only 512 elements, causing edge case GPU crash during Sort.
+    // Using 8191 instead avoids this boundary condition (fits in single 7680-particle partition).
+    const static int m_maxParticlesCount = 8192;
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;

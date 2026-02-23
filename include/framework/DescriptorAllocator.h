@@ -38,14 +38,16 @@ public:
     /// Возвращает индекс дескриптора
     UINT Alloc()
     {
-        assert(m_allocated < m_capacity);
+        if (m_allocated >= m_capacity)
+            throw std::runtime_error("DescriptorAllocator::Alloc - out of descriptors");
         return m_allocated++;
     }
 
     /// Allocates a contiguous range of descriptors and returns the start index
     UINT AllocRange(UINT count)
     {
-        assert(m_allocated + count <= m_capacity);
+        if (m_allocated + count > m_capacity)
+            throw std::runtime_error("DescriptorAllocator::AllocRange - not enough descriptors");
         UINT start = m_allocated;
         m_allocated += count;
         return start;

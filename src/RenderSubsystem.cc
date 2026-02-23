@@ -87,6 +87,9 @@ void RenderSubsystem::CreateGlobalConstantBuffer()
     if (FAILED(hr))
         throw std::runtime_error("Failed to create global constant buffer.");
 
+    if (!m_globalConstantBuffer)
+        throw std::runtime_error("CreateGlobalConstantBuffer: m_globalConstantBuffer is null after CreateCommittedResource.");
+
     m_globalCBAddress = m_globalConstantBuffer->GetGPUVirtualAddress();
 
     // Create CBV descriptor
@@ -116,9 +119,25 @@ void RenderSubsystem::UpdateGlobalConstantBuffer()
     // Map and copy data
     UINT8 *pData;
     D3D12_RANGE readRange = {0, 0};
+    if (!m_globalConstantBuffer)
+        throw std::runtime_error("UpdateGlobalConstantBuffer: m_globalConstantBuffer is null before Map.");
     HRESULT hr = m_globalConstantBuffer->Map(0, &readRange, reinterpret_cast<void **>(&pData));
+    // TODO: remove
     if (FAILED(hr))
-        throw std::runtime_error("Failed to map global constant buffer.");
+    {
+        // If the device was removed, query the device for the removal reason to get more info
+        HRESULT removedReason = S_OK;
+        if (m_device)
+        {
+            removedReason = m_device->GetDeviceRemovedReason();
+        }
+        char buf[256];
+        sprintf_s(buf, sizeof(buf), "Failed to map global constant buffer. Map HRESULT=0x%08X, DeviceRemovedReason=0x%08X\n", static_cast<unsigned int>(hr), static_cast<unsigned int>(removedReason));
+        OutputDebugStringA(buf);
+        std::string msg = std::string(buf);
+        std::cout << msg << std::endl;
+        throw std::runtime_error(msg);
+    }
     memcpy(pData, &m_globalConstants, sizeof(GlobalConstants));
     m_globalConstantBuffer->Unmap(0, nullptr);
 }
@@ -454,6 +473,24 @@ void RenderSubsystem::Draw()
     m_lastFrameTime = now;
 
     m_inputHandler.ProcessInput(deltaSeconds, camera);
+
+    // TODO: is this the right place for this?
+    // **CRITICAL**: Wait for simulation GPU work to complete before rendering particle positions
+    // This prevents reading position SRVs before Simulate() has written them to GPU
+    {
+        ID3D12Fence *simFence = SimulationSystem::GetSimulateFence();
+        uint64_t simFenceVal = SimulationSystem::GetLastSimulateFenceValue();
+        if (simFence && simFenceVal > 0)
+        {
+            if (m_commandQueue && simFence->GetCompletedValue() < simFenceVal)
+            {
+                HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+                simFence->SetEventOnCompletion(simFenceVal, eventHandle);
+                WaitForSingleObject(eventHandle, INFINITE);
+                CloseHandle(eventHandle);
+            }
+        }
+    }
 
     // Wait for previous frame to finish
     if (m_commandQueue && m_fence)

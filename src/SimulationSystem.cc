@@ -304,11 +304,11 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 void SimulationSystem::CreateSimulationKernels()
 {
     GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
-    // std::vector<std::wstring> compileArgs = {
-    //     DXC_ARG_DEBUG,
-    //     DXC_ARG_SKIP_OPTIMIZATIONS,
-    //     L"-Qembed_debug"};
-    std::vector<std::wstring> compileArgs = {DXC_ARG_OPTIMIZATION_LEVEL3};
+    std::vector<std::wstring> compileArgs = {
+        DXC_ARG_DEBUG,
+        DXC_ARG_SKIP_OPTIMIZATIONS,
+        L"-Qembed_debug"};
+    // std::vector<std::wstring> compileArgs = {DXC_ARG_OPTIMIZATION_LEVEL3};
 
     auto devicePtr = RenderSubsystem::GetDevice();
     std::filesystem::path shaderBase = L"shaders/simulation";
@@ -709,6 +709,8 @@ void SimulationSystem::SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdLis
 
 #pragma region SIMULATE
 static winrt::com_ptr<ID3D12Fence> fence = nullptr;
+static uint64_t lastSimulateFenceValue = 0;
+
 void SimulationSystem::Simulate(float dt)
 {
     if (!isRunning)
@@ -718,7 +720,7 @@ void SimulationSystem::Simulate(float dt)
 
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 
-    static int fenceVal;
+    static uint64_t fenceVal = 0;
 
     if (!fence)
     {
@@ -829,6 +831,7 @@ void SimulationSystem::Simulate(float dt)
 
     fenceVal++;
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
+    lastSimulateFenceValue = fenceVal;  // Update for Draw() to wait on
 }
 #pragma endregion
 
@@ -838,6 +841,8 @@ D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetPositionBufferSRV()
 {
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     UINT idx = particleSwapBuffers.position.GetReadBuffer()->srvIndex;
+    if (idx == UINT_MAX)
+        throw std::runtime_error("GetPositionBufferSRV - invalid SRV index");
     return alloc->GetGpuHandle(idx);
 }
 
@@ -845,7 +850,19 @@ D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetTemperatureBufferSRV()
 {
     auto alloc = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
     UINT idx = particleSwapBuffers.temperature.GetReadBuffer()->srvIndex;
+    if (idx == UINT_MAX)
+        throw std::runtime_error("GetTemperatureBufferSRV - invalid SRV index");
     return alloc->GetGpuHandle(idx);
+}
+
+uint64_t SimulationSystem::GetLastSimulateFenceValue()
+{
+    return lastSimulateFenceValue;
+}
+
+ID3D12Fence* SimulationSystem::GetSimulateFence()
+{
+    return fence.get();
 }
 #pragma endregion
 

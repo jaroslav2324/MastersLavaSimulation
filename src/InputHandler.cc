@@ -92,8 +92,8 @@ void InputHandler::ProcessInput(float deltaSeconds, Camera &camera)
     {
         if (timeout > 0.5f)
         {
-            SimulationSystem::SetSimulationRunning(runSimulation);
             runSimulation = !runSimulation;
+            SimulationSystem::SetSimulationRunning(runSimulation);
             timeout = 0.0f;
         }
     }

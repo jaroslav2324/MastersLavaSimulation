@@ -23,10 +23,14 @@ struct StructuredBuffer
             UINT64(count) * stride,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-        device->CreateCommittedResource(
+        HRESULT hr = device->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_COMMON, nullptr,
             IID_PPV_ARGS(resource.put()));
+        if (FAILED(hr) || !resource)
+        {
+            throw std::runtime_error("StructuredBuffer::Init - CreateCommittedResource failed for count=" + std::to_string(count) + " stride=" + std::to_string(stride));
+        }
 
         // Views will be created externally via CreateViews()
         srvIndex = UINT_MAX;
@@ -49,6 +53,8 @@ struct StructuredBuffer
         srv.Buffer.FirstElement = 0;
         srv.Buffer.NumElements = elementCount;
         srv.Buffer.StructureByteStride = elementStride;
+        if (!resource)
+            throw std::runtime_error("StructuredBuffer::CreateSRV - resource is null");
         device->CreateShaderResourceView(resource.get(), &srv, alloc.GetCpuHandle(srvIdx));
         srvIndex = srvIdx;
     }
@@ -62,6 +68,8 @@ struct StructuredBuffer
         uav.Buffer.FirstElement = 0;
         uav.Buffer.NumElements = elementCount;
         uav.Buffer.StructureByteStride = elementStride;
+        if (!resource)
+            throw std::runtime_error("StructuredBuffer::CreateUAV - resource is null");
         device->CreateUnorderedAccessView(resource.get(), nullptr, &uav, alloc.GetCpuHandle(uavIdx));
         uavIndex = uavIdx;
     }

@@ -119,6 +119,14 @@ public:
             m_numKeys = size;
             m_partitions = divRoundUp(m_numKeys, k_tuningParameters.partitionSize);
             m_globalHistPartitions = divRoundUp(m_numKeys, k_globalHistPartitionSize);
+
+            // Diagnostic output for boundary cases
+            char diagBuf[256];
+            sprintf_s(diagBuf, sizeof(diagBuf),
+                      "SweepBase::UpdateSize - size=%u, partitions=%u, globalHistPartitions=%u, partitionSize=%u, maxReadBack=%u\n",
+                      size, m_partitions, m_globalHistPartitions, k_tuningParameters.partitionSize, k_maxReadBack);
+            OutputDebugStringA(diagBuf);
+
             if (disposeBuffers)
             {
                 DisposeBuffers();
