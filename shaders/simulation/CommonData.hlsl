@@ -64,4 +64,10 @@ cbuffer SimParams : register(b0)
     float muMinViscosity;     // minimum mu after clamp
     float muMaxViscosity;     // maximum mu after clamp
     float muNormMaxViscosity; // value of mu that maps to viscCoeff=1 (for normalization)
+    // phase/freeze/melt parameters
+    float freezeTemperature; // temperature below which freezing may occur
+    float meltTemperature;   // temperature above which melting occurs
+    float freezeDensityFactor; // rho_i < rho0 * freezeDensityFactor triggers freezing
+    float solidVelocityDamping; // damping applied to velocities of solid particles
+    float dampingTransitionWidth; // temperature width for smoothing damping transition
 };

@@ -10,6 +10,7 @@ StructuredBuffer<float>  density             : register(t8);
 StructuredBuffer<float>  temperatureIn       : register(t2);
 
 RWStructuredBuffer<float> temperatureOut     : register(u2);
+RWStructuredBuffer<uint> phase     : register(u14);
 
 static const float Tenv = 300.0f;        // воздух TODO: в параметры симуляции
 static const float heatLossCoeff = 5.0f; // TODO: в параметры симуляции
@@ -95,5 +96,23 @@ void CSMain(uint gid : SV_DispatchThreadID)
     // TODO: to params?
     float newT = clamp(Ti + dt * dTdt, 0.01f, 2000.0f);
 
+    // phase update (Schmitt-like hysteresis):
+    // - freeze if temp < freezeTemperature AND local density is low
+    // - melt if temp > meltTemperature
+    uint curPhase = phase[i];
+
+    // TODO: use enum like constants for phase values
+    if (curPhase == 0 && newT < freezeTemperature && rhoi < rho0 * freezeDensityFactor)
+    {
+        phase[i] = 1; // freeze
+
+    }
+    else if (newT > meltTemperature)
+    {
+
+        phase[i] = 0;// melt    
+    }
+
     temperatureOut[i] = newT;
+    
 }

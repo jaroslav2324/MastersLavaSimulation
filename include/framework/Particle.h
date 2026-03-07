@@ -21,8 +21,7 @@ struct SimParams
     uint32_t numParticles = 0;
     uint32_t gridResolution[3];
 
-    float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
-    // TODO: Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
+    float velocityDamping = 1.0f;                     // e.g. = 0.99 or 1.0
     Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
@@ -34,6 +33,13 @@ struct SimParams
     float muMinViscosity = 0.0f;        // minimum mu after clamp
     float muMaxViscosity = 10.0f;       // maximum mu after clamp
     float muNormMaxViscosity = 1.0f;    // value of mu that maps to viscCoeff=1 (for normalization)
+
+    // phase/freeze/melt parameters
+    float freezeTemperature = 800.0f;     // temperature below which freezing may occur
+    float meltTemperature = 1200.0f;      // temperature above which melting occurs
+    float freezeDensityFactor = 0.90f;    // rho_i < rho0 * freezeDensityFactor triggers freezing
+    float solidVelocityDamping = 0.1f;    // damping applied to velocities of solid particles
+    float dampingTransitionWidth = 50.0f; // temperature width for smoothing damping transition
 
     // TODO: init method?
 };
@@ -55,6 +61,7 @@ enum class BufferSrvIndex : UINT
     DeltaP = 11,
     ViscosityMu = 12,
     ViscosityCoeff = 13,
+    Phase = 14,
     NumberOfSrvSlots
 };
 
@@ -78,6 +85,7 @@ enum class BufferUavIndex : UINT
     DeltaP = 11,
     ViscosityMu = 12,
     ViscosityCoeff = 13,
+    Phase = 14,
     NumberOfUavSlots
 };
 
@@ -107,6 +115,12 @@ struct PingPongBuffer
     }
 };
 
+enum class ParticlePhase : uint32_t
+{
+    Liquid = 0,
+    Solid = 1
+};
+
 struct ParticleStateSwapBuffers
 {
     PingPongBuffer position;    // x_i // !!! fake, it is no swap
@@ -129,7 +143,6 @@ struct ParticleScratchBuffers
     std::shared_ptr<StructuredBuffer> cellStart = nullptr; // per-cell
     std::shared_ptr<StructuredBuffer> cellEnd = nullptr;
 
-    // Optional
     std::shared_ptr<StructuredBuffer> phase = nullptr; // solid/liquid/etc
 };
 

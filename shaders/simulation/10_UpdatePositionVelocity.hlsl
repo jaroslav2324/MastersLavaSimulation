@@ -1,10 +1,14 @@
 // #9
 #include "CommonData.hlsl"
 
-RWStructuredBuffer<float3> positions  : register(u0);
-RWStructuredBuffer<float3> predicted  : register(u7);
-RWStructuredBuffer<float3> velocities : register(u1);
 StructuredBuffer<uint>     particleIndices : register(t4);
+
+StructuredBuffer<float>    temperatureIn : register(t2);
+StructuredBuffer<uint>     phase         : register(t14);
+
+RWStructuredBuffer<float3> positions  : register(u0);
+RWStructuredBuffer<float3> velocities : register(u1);
+RWStructuredBuffer<float3> predicted  : register(u7);
 
 static const float collisionvelocityDamping = 0.2f;
 
@@ -68,6 +72,18 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     // Optional damping
     v *= velocityDamping;
+
+    // TODO: use enum like constants for phase values
+    // Apply extra damping for solid (frozen) particles with a temperature-based smoothing
+    uint curPhase = phase[i];
+    if (curPhase == 1)
+    {
+        float Ti = temperatureIn[i];
+        float halfWidth = dampingTransitionWidth * 0.5;
+        float tCoef = saturate((Ti - (meltTemperature - halfWidth)) / dampingTransitionWidth);
+        float phaseMultiplier = lerp(solidVelocityDamping, 1.0f, tCoef);
+        v *= phaseMultiplier;
+    }
 
     velocities[i] = v;
     positions[i]  = x_new;

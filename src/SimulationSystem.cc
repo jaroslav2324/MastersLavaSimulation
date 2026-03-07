@@ -187,6 +187,14 @@ void SimulationSystem::Init(ID3D12Device *device)
     memcpy(pUploadTemp, hostTemps.data(), (size_t)tempUploadSize);
     uploadTempResource->Unmap(0, nullptr);
 
+    // upload phase buffer (initialize all to liquid)
+    UINT64 phaseUploadSize = UINT64(m_maxParticlesCount) * sizeof(uint32_t);
+    auto uploadPhaseResource = UploadHelpers::CreateUploadBuffer(device, phaseUploadSize);
+    void *pUploadPhase = nullptr;
+    ThrowIfFailed(uploadPhaseResource->Map(0, &readRange, &pUploadPhase));
+    memset(pUploadPhase, static_cast<int>(ParticlePhase::Liquid), (size_t)phaseUploadSize);
+    uploadPhaseResource->Unmap(0, nullptr);
+
     // prepare single command allocator/list to perform GPU copies for both swap buffers
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
     winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
@@ -225,6 +233,14 @@ void SimulationSystem::Init(ID3D12Device *device)
         uploadTempResource.get(),
         particleSwapBuffers.temperature.buffers[1]->resource.get(),
         tempUploadSize,
+        D3D12_RESOURCE_STATE_COMMON,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    UploadHelpers::CopyBufferToResource(
+        cmdList.get(),
+        uploadPhaseResource.get(),
+        particleScratchBuffers.phase->resource.get(),
+        phaseUploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
@@ -337,17 +353,17 @@ void SimulationSystem::CreateSimulationKernels()
     m_applyDeltaPos = std::make_unique<SimulationKernels::ApplyDeltaPos>(
         devicePtr, devInfo, compileArgs, shaderBase / L"8_ApplyDeltaPos.hlsl", m_rootSignature);
 
+    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
+        devicePtr, devInfo, compileArgs, shaderBase / L"9_HeatTransfer.hlsl", m_rootSignature);
+
     m_updatePosVel = std::make_unique<SimulationKernels::UpdatePositionVelocity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"9_UpdatePositionVelocity.hlsl", m_rootSignature);
+        devicePtr, devInfo, compileArgs, shaderBase / L"10_UpdatePositionVelocity.hlsl", m_rootSignature);
 
     m_viscosity = std::make_unique<SimulationKernels::Viscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"10_Viscosity.hlsl", m_rootSignature);
+        devicePtr, devInfo, compileArgs, shaderBase / L"11_Viscosity.hlsl", m_rootSignature);
 
     m_applyViscosity = std::make_unique<SimulationKernels::ApplyViscosity>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"11_ApplyViscosity.hlsl", m_rootSignature);
-
-    m_heatTransfer = std::make_unique<SimulationKernels::HeatTransfer>(
-        devicePtr, devInfo, compileArgs, shaderBase / L"12_HeatTransfer.hlsl", m_rootSignature);
+        devicePtr, devInfo, compileArgs, shaderBase / L"12_ApplyViscosity.hlsl", m_rootSignature);
 
     m_oneSweep = std::make_unique<OneSweep>(devicePtr, devInfo, GPUSorting::ORDER_ASCENDING, GPUSorting::KEY_UINT32, GPUSorting::PAYLOAD_UINT32);
     m_oneSweep->SetAllBuffers(
@@ -503,6 +519,9 @@ void SimulationSystem::InitSimulationBuffers(
 
     particleScratchBuffers.viscosityCoeff->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::ViscosityCoeff);
     particleScratchBuffers.viscosityCoeff->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::ViscosityCoeff);
+
+    particleScratchBuffers.phase->CreateSRV(device, allocGPU, m_srvBase + BufferSrvIndex::Phase);
+    particleScratchBuffers.phase->CreateUAV(device, allocGPU, m_uavBase + BufferUavIndex::Phase);
 
     // swap buffers
     particleSwapBuffers.position.buffers[1]->CreateSRV(device, allocGPU, m_pingPongSrvBase + BufferSrvIndex::Position);
@@ -809,25 +828,25 @@ void SimulationSystem::Simulate(float dt)
         UAVBarrierSingle(cmdList, particleScratchBuffers.predictedPosition->resource);
     }
 
-    // 7) Update positions and velocities (write to position and velocity dst buffers)
+    // 7) Heat transfer (temperature diffusion)
+    m_heatTransfer->Dispatch(cmdList, numParticles);
+    UAVBarrierSingle(cmdList, particleSwapBuffers.temperature.GetWriteBuffer()->resource);
+    particleSwapBuffers.temperature.Swap();
+
+    // 8) Update positions and velocities (write to position and velocity dst buffers)
     m_updatePosVel->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.position.GetWriteBuffer()->resource);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
 
-    // 8) Viscosity: compute viscosity mu and coefficient from temperature
+    // 9) Viscosity: compute viscosity mu and coefficient from temperature
     m_viscosity->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleScratchBuffers.viscosityCoeff->resource);
 
-    // 9) Apply viscosity to velocities
+    // 10) Apply viscosity to velocities
     m_applyViscosity->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
     particleSwapBuffers.velocity.Swap();
     // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
-
-    // 10) Heat transfer (temperature diffusion)
-    m_heatTransfer->Dispatch(cmdList, numParticles);
-    UAVBarrierSingle(cmdList, particleSwapBuffers.temperature.GetWriteBuffer()->resource);
-    particleSwapBuffers.temperature.Swap();
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists2[] = {cmdList.get()};
