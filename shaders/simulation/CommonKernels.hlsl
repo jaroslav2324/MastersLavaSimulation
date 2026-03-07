@@ -70,7 +70,7 @@ float cubic_kernel_height(float3 r)
 float3 cubic_kernel_gradient(float3 r)
 {
     float dist = length(r);
-    if (dist > h || dist < 1e-6) return float3(0,0,0);
+    if (dist > h || dist < 1e-4) return float3(0,0,0);
     float q = dist / h;
     float invDist = 1.0 / (dist * h);
     float3 gradq = r * invDist; // d(q)/d(r) * r/|r| => r/(dist*h)

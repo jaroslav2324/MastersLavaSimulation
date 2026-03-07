@@ -59,7 +59,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
                 continue;
 
             float Tj = temperatureIn[j];
-            float rhoj = max(density[j], 1e-6);
+            float rhoj = max(density[j], 0.1 * rhoi); // TODO: check if this is ok, should prevents instability(не подтверждено активное влияние) 
             float kj = GetThermalConductivity(Tj);
 
             // TODO: move increased kernel radius to params

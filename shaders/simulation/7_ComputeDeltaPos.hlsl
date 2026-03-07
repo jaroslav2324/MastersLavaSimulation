@@ -23,6 +23,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
     uint i = particleIndices[gid];
     float3 pi = predicted[i];
     float3 dpi = float3(0,0,0);
+    uint neighbourCount = 0;
 
     float li = lambda[i];
 
@@ -60,6 +61,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float dist2 = dot(rij, rij);
             if (dist2 >= h2) continue;
 
+            neighbourCount += 1;
+
             float3 gradW = cubic_kernel_gradient(rij);
             float lj = lambda[j];
 
@@ -71,11 +74,14 @@ void CSMain(uint gid : SV_DispatchThreadID)
         }
     }
 
+    dpi /= max(neighbourCount, 1);
+
     float maxDelta = 5.0f * h;
 
     float len = length(dpi);
     if (len > maxDelta)
         dpi *= maxDelta / len;
 
-    deltaP[i] = dpi / rho0;
+    //float relaxation = 0.6; 
+    deltaP[i] =  dpi / (rho0 / 10.0f);
 }

@@ -23,7 +23,7 @@ struct SimParams
 
     float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
     // TODO: Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
-    Vector3 gravityVec = Vector3(0.0f, -0.981f, 0.0f); // gravity (0, -9.81, 0)
+    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset
@@ -55,7 +55,7 @@ enum class BufferSrvIndex : UINT
     DeltaP = 11,
     ViscosityMu = 12,
     ViscosityCoeff = 13,
-    NumberOfSrvSlots = 14
+    NumberOfSrvSlots
 };
 
 UINT operator+(UINT offset, BufferSrvIndex index);
@@ -78,7 +78,7 @@ enum class BufferUavIndex : UINT
     DeltaP = 11,
     ViscosityMu = 12,
     ViscosityCoeff = 13,
-    NumberOfUavSlots = 14
+    NumberOfUavSlots
 };
 
 UINT operator+(UINT offset, BufferUavIndex index);

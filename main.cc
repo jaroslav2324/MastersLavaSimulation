@@ -17,6 +17,8 @@ int main(int argc, char **argv)
 
 	const int stopAtSimFrames = 10000;
 
+	SimulationSystem::StartSimulation();
+
 	MSG msg = {};
 	while (msg.message != WM_QUIT && (stopAtSimFrames == 0 || simTimeAcc.count() < stopAtSimFrames))
 	{

@@ -98,10 +98,7 @@ private:
     inline static UINT m_pingPongUavBase = 0;
 
     const static int m_gridCellsCount = 1 << 12;
-    // NOTE: OneSweep partitionSize for this GPU is 7680. At exactly 8192 (= 7680 + 512),
-    // the second partition is only 512 elements, causing edge case GPU crash during Sort.
-    // Using 8191 instead avoids this boundary condition (fits in single 7680-particle partition).
-    const static int m_maxParticlesCount = 8192;
+    const static int m_maxParticlesCount = (1 << 15); //+ (1 << 13) + (1 << 13);
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;

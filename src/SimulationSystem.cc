@@ -718,6 +718,8 @@ void SimulationSystem::Simulate(float dt)
         return;
     }
 
+    dt = std::min(dt, 0.167f); // clamp delta time to avoid instability from large steps
+
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 
     static uint64_t fenceVal = 0;
@@ -759,7 +761,10 @@ void SimulationSystem::Simulate(float dt)
 
     // 3) Compute spatial hash into sort buffers
     m_cellHash->Dispatch(cmdList, numParticles);
-    // UAVBarrierSingle(cmdList, sortBuffers.hashBuffers[0]->resource);
+    UAVBarrierSingle(cmdList, sortBuffers.hashBuffers[0]->resource);
+    UAVBarrierSingle(cmdList, sortBuffers.hashBuffers[1]->resource);
+    UAVBarrierSingle(cmdList, sortBuffers.indexBuffers[0]->resource);
+    UAVBarrierSingle(cmdList, sortBuffers.indexBuffers[1]->resource);
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists[] = {cmdList.get()};
@@ -785,7 +790,7 @@ void SimulationSystem::Simulate(float dt)
     UAVBarrierSingle(cmdList, particleScratchBuffers.cellEnd->resource);
 
     // 6) PBF solver iterations
-    for (int iter = 0; iter < 10; ++iter)
+    for (int iter = 0; iter < 3; ++iter)
     {
         // Compute density
         m_computeDensity->Dispatch(cmdList, numParticles);
@@ -831,7 +836,7 @@ void SimulationSystem::Simulate(float dt)
 
     fenceVal++;
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
-    lastSimulateFenceValue = fenceVal;  // Update for Draw() to wait on
+    lastSimulateFenceValue = fenceVal; // Update for Draw() to wait on
 }
 #pragma endregion
 
@@ -860,7 +865,7 @@ uint64_t SimulationSystem::GetLastSimulateFenceValue()
     return lastSimulateFenceValue;
 }
 
-ID3D12Fence* SimulationSystem::GetSimulateFence()
+ID3D12Fence *SimulationSystem::GetSimulateFence()
 {
     return fence.get();
 }

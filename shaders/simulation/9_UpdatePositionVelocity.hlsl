@@ -12,6 +12,7 @@ static const float collisionvelocityDamping = 0.2f;
 void CSMain(uint gid : SV_DispatchThreadID)
 {
     if (gid >= numParticles) return;
+    // TODO: use gid directly as index, without particleIndices indirection?
     uint i = particleIndices[gid];
 
     float3 x_old = positions[i];

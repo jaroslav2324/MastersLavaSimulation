@@ -1,4 +1,3 @@
-// #3
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositionBuffer : register(t7);
@@ -10,11 +9,10 @@ RWStructuredBuffer<uint> indexBuffer : register(u4);
 void CS_HashParticles(uint gid : SV_DispatchThreadID)
 {
     if (gid >= numParticles) return;
-    uint id = indexBuffer[gid];
 
-    float3 pos = predictedPositionBuffer[id];
+    float3 pos = predictedPositionBuffer[gid];
     uint3 cell = GetCellCoord(pos);
 
-    hashBuffer[id]  = GetCellHash(cell);
-    indexBuffer[id] = id;
+    hashBuffer[gid]  = GetCellHash(cell);
+    indexBuffer[gid] = gid;
 }
