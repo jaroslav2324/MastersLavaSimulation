@@ -10,11 +10,11 @@ RWStructuredBuffer<float3> gVelocity           : register(u1);
 [numthreads(256, 1, 1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
-    if (gid >= numParticles) return;
-    uint i = particleIndices[gid.x];
+    // if (gid >= numParticles) return;
+    // uint i = particleIndices[gid.x];
 
-    float3 q = gPredictedPositions[i];
-    float3 v = gVelocity[i];
+    // float3 q = gPredictedPositions[i];
+    // float3 v = gVelocity[i];
 
     // TODO: remove?
     // if (q.y <= 0.0)

@@ -21,8 +21,8 @@ struct SimParams
     uint32_t numParticles = 0;
     uint32_t gridResolution[3];
 
-    float velocityDamping = 1.0f;                     // e.g. = 0.99 or 1.0
-    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f); // gravity (0, -9.81, 0)
+    float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
+    Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f);
 
     float yViscosity = 1.0f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset

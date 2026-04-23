@@ -115,6 +115,62 @@ void SimulationSystem::GenerateTemperaturesForPositions(
     }
 }
 
+std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDamBreakPositions(UINT numParticles)
+{
+    std::vector<DirectX::SimpleMath::Vector3> out;
+    out.reserve(numParticles);
+    std::mt19937 rng(1337);
+    std::uniform_real_distribution<float> u(0.0f, 1.0f);
+
+    // Dam break: particles in a rectangular region along the left wall
+    float thickness = 2.0f; // x-direction thickness
+    float height = 5.0f;    // y-direction height
+    float width = 5.0f;     // z-direction width
+
+    // Calculate grid sizes proportionally to the dimensions
+    double volume = thickness * height * width;
+    double cubeRoot = std::cbrt(numParticles / volume);
+    int nx = std::max(1, (int)std::round(thickness * cubeRoot));
+    int ny = std::max(1, (int)std::round(height * cubeRoot));
+    int nz = std::max(1, (int)std::round(width * cubeRoot));
+
+    for (int z = 0; z < nz && out.size() < numParticles; ++z)
+    {
+        for (int y = 0; y < ny && out.size() < numParticles; ++y)
+        {
+            for (int x = 0; x < nx && out.size() < numParticles; ++x)
+            {
+                float fx = (x + u(rng)) / nx * thickness;
+                float fy = (y + u(rng)) / ny * height;
+                float fz = (z + u(rng)) / nz * width;
+                out.emplace_back(fx, fy, fz);
+            }
+        }
+    }
+    return out;
+}
+
+void SimulationSystem::GenerateDamBreakTemperatures(
+    const std::vector<DirectX::SimpleMath::Vector3> &positions,
+    std::vector<float> &outTemps)
+{
+    std::mt19937 rng(1337);
+    std::uniform_real_distribution<float> u(0.0f, 1.0f);
+
+    outTemps.clear();
+    outTemps.reserve(positions.size());
+
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        outTemps.push_back(900.0f + 100.0f * (u(rng) - 0.5f)); // Uniform temperature
+    }
+}
+
+void SimulationSystem::SetMaxParticlesCount(UINT maxParticlesCount)
+{
+    m_maxParticlesCount = maxParticlesCount;
+}
+
 #pragma region INIT
 void SimulationSystem::Init(ID3D12Device *device)
 {
@@ -320,11 +376,11 @@ void SimulationSystem::CreateSimulationRootSignature(ID3D12Device *device)
 void SimulationSystem::CreateSimulationKernels()
 {
     GPUSorting::DeviceInfo devInfo = RenderSubsystem::GetDeviceInfo();
-    std::vector<std::wstring> compileArgs = {
-        DXC_ARG_DEBUG,
-        DXC_ARG_SKIP_OPTIMIZATIONS,
-        L"-Qembed_debug"};
-    // std::vector<std::wstring> compileArgs = {DXC_ARG_OPTIMIZATION_LEVEL3};
+    // std::vector<std::wstring> compileArgs = {
+    //     DXC_ARG_DEBUG,
+    //     DXC_ARG_SKIP_OPTIMIZATIONS,
+    //     L"-Qembed_debug"};
+    std::vector<std::wstring> compileArgs = {DXC_ARG_OPTIMIZATION_LEVEL3};
 
     auto devicePtr = RenderSubsystem::GetDevice();
     std::filesystem::path shaderBase = L"shaders/simulation";

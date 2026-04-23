@@ -302,7 +302,7 @@ void RenderSubsystem::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height
     swapChainDesc.Scaling = DXGI_SCALING_NONE;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-    // swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING; // Disable VSync
+    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING; // Disable VSync
 
     IDXGISwapChain1 *rawSwapChainPtr = nullptr;
 
@@ -584,7 +584,7 @@ void RenderSubsystem::Draw()
     ID3D12CommandList *ppCommandLists[] = {m_commandList.get()};
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
-    m_swapChain->Present(1, 0);
+    m_swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
     // TODO: use wait for fence?
     m_fenceValue++;
