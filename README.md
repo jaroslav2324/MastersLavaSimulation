@@ -11,9 +11,17 @@
   - Теплообмен и теплопотеря
   - Температурно-зависимая вязкость
   - Застывание лавы
-- **Сортировка частиц**: Используется эффективная one-sweep radix сортировка из репозитория [GPUSorting](https://github.com/microsoft/GPUSorting) для оптимизации вычислений.
+- **Сортировка частиц**: Используется эффективная one-sweep radix сортировка из репозитория [GPUSorting](https://github.com/b0nes164/GPUSorting) для оптимизации вычислений.
 
 ## Визуализация и производительность
 
+<img width="750" height="1100" alt="image" src="https://github.com/user-attachments/assets/096d3d23-ce79-48e9-8cd3-8d9aa29173c9" />
 
+Среднее время 10к шанов симуляции, 4096 ячеек пространства, сцена с шаром
+<img width="944" height="500" alt="image" src="https://github.com/user-attachments/assets/bebe95e2-626d-4554-be0f-e130142724cc" />
 
+Среднее время 10к шанов симуляции, 16384 ячеек пространства, сцена с шаром
+<img width="2079" height="1274" alt="123123" src="https://github.com/user-attachments/assets/dba2523a-253a-469f-884d-eb40b809eb80" />
+
+Среднее время 10к шанов симуляции, 4096 ячеек пространства, сцена dam break
+<img width="2079" height="1290" alt="321321" src="https://github.com/user-attachments/assets/d3700a12-427b-4683-a1e4-2672dd43d421" />
