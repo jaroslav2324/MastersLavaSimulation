@@ -2,6 +2,7 @@
 
 #include "pch.h"
 #include "Particle.h"
+#include "SceneSetup.h"
 
 #include "GPUSorting/GPUSorting.h"
 #include "GPUSorting/OneSweep.h"
@@ -25,6 +26,7 @@ public:
     SimulationSystem() = delete;
     static void Init(ID3D12Device *device);
     static void SetMaxParticlesCount(UINT maxParticlesCount);
+    static void SetScene(SceneType scene) { m_scene = scene; }
 
     static bool IsRunning() { return isRunning; };
     static void SetSimulationRunning(bool isRunningIn) { isRunning = isRunningIn; };
@@ -41,15 +43,6 @@ public:
     // GPU sync helpers for render-simulation coordination
     static uint64_t GetLastSimulateFenceValue();
     static ID3D12Fence *GetSimulateFence();
-
-    // Particle initialization helpers
-    static std::vector<DirectX::SimpleMath::Vector3> GenerateUniformGridPositions(UINT numParticles);
-    static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseBottomWithSphere(UINT numParticles);
-    static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseRandomPositions(UINT numParticles, unsigned seed = 1337);
-    static std::vector<DirectX::SimpleMath::Vector3> GenerateDamBreakPositions(UINT numParticles);
-    // Generate temperatures for a set of positions according to scene rules
-    static void GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
-    static void GenerateDamBreakTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
@@ -100,8 +93,8 @@ private:
     inline static UINT m_pingPongSrvBase = 0;
     inline static UINT m_pingPongUavBase = 0;
 
-    const static int m_gridCellsCount = 1 << 16;
-    inline static UINT m_maxParticlesCount = (1 << 15); //(1 << 16) + (1 << 15); //(1 << 16) + (1 << 14); // + + (1 << 13); //; // ;
+    const static int m_gridCellsCount = 1 << 14;
+    inline static UINT m_maxParticlesCount = (1 << 15);
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;
@@ -109,4 +102,5 @@ private:
     inline static SortBuffers sortBuffers;
 
     inline static bool isRunning = false;
+    inline static SceneType m_scene = SceneType::TwoSpheres;
 };
