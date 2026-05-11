@@ -1,16 +1,14 @@
-// #11
 #include "CommonKernels.hlsl"
 
-StructuredBuffer<float3> predicted : register(t7);
+StructuredBuffer<float3> predicted      : register(t7);
 StructuredBuffer<uint>   particleIndices : register(t4);
-StructuredBuffer<uint>   cellStart : register(t5);
-StructuredBuffer<uint>   cellEnd   : register(t6);
-StructuredBuffer<float>  viscCoeff : register(t13);
-StructuredBuffer<float3> velocitiesIn : register(t1); // read velocities
+StructuredBuffer<uint>   cellStart       : register(t5);
+StructuredBuffer<uint>   cellEnd         : register(t6);
+StructuredBuffer<float>  viscCoeff       : register(t13);
+StructuredBuffer<float3> velocitiesIn    : register(t1);
 
-RWStructuredBuffer<float3> velocities : register(u1); // write velocities
+RWStructuredBuffer<float3> velocities : register(u1);
 
-// TODO: check
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
 {
@@ -18,8 +16,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
     uint i = particleIndices[gid];
 
     float3 xi = predicted[i];
-    float3 vi = velocitiesIn[i]; // read from input buffer
-    float ci  = viscCoeff[i];
+    float3 vi = velocitiesIn[i];
+    float  ci = viscCoeff[i];
 
     if (ci <= 0.0)
     {
@@ -42,11 +40,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
             nc.x >= gridResolution.x ||
             nc.y >= gridResolution.y ||
             nc.z >= gridResolution.z)
-        {
             continue;
-        }
 
-        uint hash = GetCellHash(uint3(nc));
+        uint hash  = GetCellHash(uint3(nc));
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -55,9 +51,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
             uint j = particleIndices[idx];
             if (j == i) continue;
 
-            float3 xj = predicted[j];
+            float3 xj  = predicted[j];
             float3 rij = xi - xj;
-            float r2 = dot(rij, rij);
+            float  r2  = dot(rij, rij);
 
             if (r2 >= h2) continue;
 
@@ -67,10 +63,10 @@ void CSMain(uint gid : SV_DispatchThreadID)
         }
     }
 
-    // Normalize by max(actual kernel sum, rho0):
+    // Normalize by max(sumW, rho0):
     // - at rest density sumW ≈ rho0 → same as /rho0
-    // - overdense (sumW > rho0) → reduces correction, prevents overshoot / oscillation
-    // - underdense (sumW < rho0) → use rho0 to avoid over-amplifying sparse regions
+    // - overdense (sumW > rho0) → reduces correction, prevents oscillation
+    // - underdense (sumW < rho0) → use rho0 to avoid amplifying sparse regions
     float norm = max(sumW, rho0);
     velocities[i] = vi + ci * (dv / norm);
 }

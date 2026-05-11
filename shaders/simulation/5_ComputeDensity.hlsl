@@ -1,4 +1,3 @@
-// #5
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t7);
@@ -34,7 +33,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
             continue;
 
         uint hash = GetCellHash(ncell);
-
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -42,18 +40,15 @@ void CSMain(uint gid : SV_DispatchThreadID)
         for (uint idx = start; idx < end; idx++)
         {
             uint j = particleIndecies[idx];
-            // do not skip if i == j
+            // self-contribution is intentionally included (no i == j skip)
 
             float3 qj = predictedPositions[j];
-
             float3 r = qi - qj;
-            float dist2 = dot(r,r);
-            if (dist2 >= h2) continue;
+            if (dot(r,r) >= h2) continue;
 
             rho += mass * cubic_kernel_height(r);
         }
     }
-
 
     density[i] = rho;
     constraintC[i] = rho / rho0 - 1.0;

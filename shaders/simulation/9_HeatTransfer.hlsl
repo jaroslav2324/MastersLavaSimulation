@@ -1,19 +1,17 @@
-// #12
-
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t7);
 StructuredBuffer<uint>   particleIndices    : register(t4);
-StructuredBuffer<uint>   cellStart           : register(t5);
-StructuredBuffer<uint>   cellEnd             : register(t6);
-StructuredBuffer<float>  density             : register(t8);
-StructuredBuffer<float>  temperatureIn       : register(t2);
+StructuredBuffer<uint>   cellStart          : register(t5);
+StructuredBuffer<uint>   cellEnd            : register(t6);
+StructuredBuffer<float>  density            : register(t8);
+StructuredBuffer<float>  temperatureIn      : register(t2);
 
-RWStructuredBuffer<float> temperatureOut     : register(u2);
-RWStructuredBuffer<uint> phase     : register(u14);
+RWStructuredBuffer<float> temperatureOut : register(u2);
+RWStructuredBuffer<uint>  phase          : register(u14);
 
-static const float Tenv = 300.0f;        // воздух TODO: в параметры симуляции
-static const float heatLossCoeff = 5.0f; // TODO: в параметры симуляции
+static const float Tenv         = 300.0f;
+static const float heatLossCoeff = 5.0f;
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -23,11 +21,10 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     uint i = particleIndices[gid];
 
-    float3 pi = predictedPositions[i];
-    float  Ti = temperatureIn[i];
+    float3 pi   = predictedPositions[i];
+    float  Ti   = temperatureIn[i];
     float  rhoi = max(density[i], 1e-6);
-
-    float ki = GetThermalConductivity(Ti);
+    float  ki   = GetThermalConductivity(Ti);
 
     float dTdt = 0.0;
 
@@ -41,7 +38,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
         if (any(nc < 0) || any(nc >= int3(gridResolution)))
             continue;
 
-        uint hash = GetCellHash(uint3(nc));
+        uint hash  = GetCellHash(uint3(nc));
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -51,68 +48,45 @@ void CSMain(uint gid : SV_DispatchThreadID)
             uint j = particleIndices[idx];
             if (j == i) continue;
 
-            float3 pj = predictedPositions[j];
+            float3 pj  = predictedPositions[j];
             float3 rij = pi - pj;
+            float  r2  = dot(rij, rij);
 
-            float r2 = dot(rij, rij);
-            // TODO: move increased kernel radius to params
             if (r2 >= 25.0f * h2)
                 continue;
 
-            float Tj = temperatureIn[j];
-            float rhoj = max(density[j], 0.1 * rhoi); // TODO: check if this is ok, should prevents instability(не подтверждено активное влияние) 
-            float kj = GetThermalConductivity(Tj);
+            float Tj   = temperatureIn[j];
+            float rhoj = max(density[j], 0.1 * rhoi);
+            float kj   = GetThermalConductivity(Tj);
 
-            // TODO: move increased kernel radius to params
-            float3 gradW = - 5.0f * cubic_kernel_gradient(rij / 5.0f);
-
-            float dotTerm = dot(rij, gradW);
-            float denom   = r2 + epsHeatTransfer;
+            // Extended kernel with 5h radius: scale r by 1/5 and compensate gradient magnitude
+            float3 gradW  = -5.0f * cubic_kernel_gradient(rij / 5.0f);
+            float  dotTerm = dot(rij, gradW);
+            float  denom   = r2 + epsHeatTransfer;
 
             float kij = (2.0 * ki * kj) / (ki + kj);
 
             float contrib =
-                mass *
-                kij *
-                (Tj - Ti) *
-                dotTerm /
+                mass * kij * (Tj - Ti) * dotTerm /
                 (rhoi * rhoj * denom);
 
-            // TODO: analyze is ot ok
             dTdt += clamp(contrib, -0.01, 0.01);
         }
     }
 
     float exposure = saturate((rho0 - rhoi) / rho0);
-    exposure = pow(exposure, 1.5); 
+    exposure = pow(exposure, 1.5);
 
-    float heatLoss =
-        heatLossCoeff *
-        exposure *
-        (Ti - Tenv);
+    dTdt -= heatLossCoeff * exposure * (Ti - Tenv);
 
-    dTdt -= heatLoss;
-
-    // TODO: to params?
     float newT = clamp(Ti + dt * dTdt, 0.01f, 2000.0f);
 
-    // phase update (Schmitt-like hysteresis):
-    // - freeze if temp < freezeTemperature AND local density is low
-    // - melt if temp > meltTemperature
     uint curPhase = phase[i];
 
-    // TODO: use enum like constants for phase values
     if (curPhase == 0 && newT < freezeTemperature && rhoi < rho0 * freezeDensityFactor)
-    {
-        phase[i] = 1; // freeze
-
-    }
+        phase[i] = 1;
     else if (newT > meltTemperature)
-    {
-
-        phase[i] = 0;// melt    
-    }
+        phase[i] = 0;
 
     temperatureOut[i] = newT;
-    
 }

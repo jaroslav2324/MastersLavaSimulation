@@ -52,7 +52,6 @@ private:
     static void InitSortIndexBuffers(ID3D12Device *device, DescriptorAllocator &alloc, UINT numParticles);
 
     static void SetRootSigAndDescTables(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
-    // descriptor tables
     static void SetPingPongBufferRootSig(ID3D12GraphicsCommandList *cmdList, const PingPongBuffer &buffer,
                                          UINT rootSrvIndex, UINT rootUavIndex, DescriptorAllocator &allocGPU);
     static void SetPositionPingPongRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
@@ -60,7 +59,6 @@ private:
     static void SetTemperaturePingPongRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
     static void SetOtherSrvsRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
     static void SetOtherUavsRootSig(ID3D12GraphicsCommandList *cmdList, DescriptorAllocator &allocGPU);
-    // cbv
     static void SetSimulationConstantRootSig(ID3D12GraphicsCommandList *cmdList, D3D12_GPU_VIRTUAL_ADDRESS cbAddress);
 
     inline static SimParams m_simParams = {};
@@ -85,17 +83,13 @@ private:
 
     inline static ID3D12DescriptorHeap *m_uavHeap = nullptr;
 
-    // reserved descriptor table bases
     inline static UINT m_srvBase = 0;
     inline static UINT m_uavBase = 0;
-
-    // ping-pong descriptor ranges for indirection
     inline static UINT m_pingPongSrvBase = 0;
     inline static UINT m_pingPongUavBase = 0;
 
     const static int m_gridCellsCount = 1 << 14;
     inline static UINT m_maxParticlesCount = (1 << 15);
-    inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;
     inline static ParticleScratchBuffers particleScratchBuffers;

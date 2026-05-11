@@ -1,4 +1,3 @@
-// #6
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predictedPositions : register(t7);
@@ -19,14 +18,13 @@ void CSMain(uint gid : SV_DispatchThreadID)
     uint i = particleIndecies[gid];
 
     float3 pi = predictedPositions[i];
-
-    float Ci = constraintC[i]; 
+    float Ci = constraintC[i];
 
     float sumGrad2 = 0.0;
     float3 grad_i = float3(0,0,0);
 
     uint3 cell = GetCellCoord(pi);
- 
+
     for (int dz = -1; dz <= 1; dz++)
     for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++)
@@ -37,7 +35,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
         if (nc.x >= gridResolution.x || nc.y >= gridResolution.y || nc.z >= gridResolution.z) continue;
 
         uint hash = GetCellHash(uint3(nc));
-
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -54,16 +51,16 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
             float3 gradW = cubic_kernel_gradient(rij);
 
-            float3 grad_j = - (mass / rho0) * gradW;
+            float3 grad_j = -(mass / rho0) * gradW;
             sumGrad2 += dot(grad_j, grad_j);
 
-            grad_i += (mass / rho0) * gradW; 
+            grad_i += (mass / rho0) * gradW;
         }
     }
 
-    // добавляем вклад градиента wrt i
+    // include gradient wrt i
     sumGrad2 += dot(grad_i, grad_i);
 
     float lam = -Ci / (sumGrad2 + eps);
-    lambda[i] = lam; // clamp(lam, -lambdaMax, lambdaMax);
+    lambda[i] = clamp(lam, -lambdaMax, lambdaMax);
 }

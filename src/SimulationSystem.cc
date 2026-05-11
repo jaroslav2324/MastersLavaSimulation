@@ -506,7 +506,6 @@ void SimulationSystem::InitTemperatureBuffer(ID3D12Device *device, UINT numParti
 }
 #pragma endregion
 
-// TODO: move somewhere
 #pragma region ROOT SIGNATURE SETTERS
 void SimulationSystem::SetPingPongBufferRootSig(
     ID3D12GraphicsCommandList *cmdList,
@@ -531,13 +530,7 @@ void SimulationSystem::SetPositionPingPongRootSig(
     ID3D12GraphicsCommandList *cmdList,
     DescriptorAllocator &allocGPU)
 {
-    // SetPingPongBufferRootSig(
-    //     cmdList,
-    //     particleSwapBuffers.position,
-    //     0, // root SRV
-    //     1, // root UAV
-    //     allocGPU);
-
+    // Position ping-pong is fake: both t0 and u0 point to the same read buffer.
     auto buf = particleSwapBuffers.position.GetReadBuffer();
 
     cmdList->SetComputeRootDescriptorTable(
@@ -646,7 +639,6 @@ void SimulationSystem::Simulate(float dt)
 
     m_simParams.dt = dt;
 
-    // copy updated SimParams into the upload constant buffer
     D3D12_RANGE readRange{0, 0};
     void *pData = nullptr;
     ThrowIfFailed(m_simParamsUpload->Map(0, &readRange, &pData));
@@ -655,7 +647,6 @@ void SimulationSystem::Simulate(float dt)
 
     std::shared_ptr<DescriptorAllocator> allocGPU = RenderSubsystem::GetCBVSRVUAVAllocatorGPUVisible();
 
-    // TODO: do not create allocator and list each frame
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
     winrt::com_ptr<ID3D12GraphicsCommandList> cmdList;
     ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(cmdAlloc.put())));
@@ -690,8 +681,7 @@ void SimulationSystem::Simulate(float dt)
     fenceVal++;
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
 
-    // TODO: sort to this command list
-    // 4) Configure OneSweep to use our hash/index buffers and sort
+    // 4) Sort particles by spatial hash
     m_oneSweep->Sort();
 
     fenceVal++;
@@ -699,7 +689,7 @@ void SimulationSystem::Simulate(float dt)
 
     SetRootSigAndDescTables(cmdList.get(), *allocGPU);
 
-    // 5) (hash->cell start)
+    // 5) Build cell ranges from sorted hashes
     m_hashToIndex->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleScratchBuffers.cellStart->resource);
     UAVBarrierSingle(cmdList, particleScratchBuffers.cellEnd->resource);
@@ -707,46 +697,42 @@ void SimulationSystem::Simulate(float dt)
     // 6) PBF solver iterations
     for (int iter = 0; iter < 3; ++iter)
     {
-        // Compute density
         m_computeDensity->Dispatch(cmdList, numParticles);
         UAVBarrierSingle(cmdList, particleScratchBuffers.density->resource);
 
-        // Compute lambda
         m_computeLambda->Dispatch(cmdList, numParticles);
         UAVBarrierSingle(cmdList, particleScratchBuffers.lambda->resource);
 
-        // Compute position corrections
         m_computeDeltaPos->Dispatch(cmdList, numParticles);
         UAVBarrierSingle(cmdList, particleScratchBuffers.deltaP->resource);
 
-        // Apply corrections
         m_applyDeltaPos->Dispatch(cmdList, numParticles);
         UAVBarrierSingle(cmdList, particleScratchBuffers.predictedPosition->resource);
     }
 
-    // 7) Heat transfer (temperature diffusion)
+    // 7) Heat transfer
     m_heatTransfer->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.temperature.GetWriteBuffer()->resource);
     particleSwapBuffers.temperature.Swap();
 
-    // 8) Update positions and velocities (write to position and velocity dst buffers)
+    // 8) Finalize positions and derive velocities from displacement
     m_updatePosVel->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.position.GetWriteBuffer()->resource);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
 
-    // Swap velocity so step 10 (ApplyViscosity) reads step 8's output via t1, not the stale previous-frame buffer
+    // Swap so ApplyViscosity reads step 8's velocity via t1 (SRV).
+    // No second swap after ApplyViscosity: XSPH output stays in u1 (write buffer),
+    // which PredictPositions reads next frame, feeding viscosity into position prediction.
     particleSwapBuffers.velocity.Swap();
     SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
-    // 9) Viscosity: compute viscosity mu and coefficient from temperature
+    // 9) Compute per-particle viscosity coefficient from temperature
     m_viscosity->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleScratchBuffers.viscosityCoeff->resource);
 
-    // 10) Apply viscosity to velocities
+    // 10) XSPH velocity smoothing
     m_applyViscosity->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
-    particleSwapBuffers.velocity.Swap();
-    // SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     ThrowIfFailed(cmdList->Close());
     ID3D12CommandList *lists2[] = {cmdList.get()};
@@ -755,11 +741,10 @@ void SimulationSystem::Simulate(float dt)
 
     fenceVal++;
     RenderSubsystem::WaitForFence(fence.get(), fenceVal);
-    lastSimulateFenceValue = fenceVal; // Update for Draw() to wait on
+    lastSimulateFenceValue = fenceVal;
 }
 #pragma endregion
 
-// TODO: move to StructuredBuffer?
 #pragma region GETTERS
 D3D12_GPU_DESCRIPTOR_HANDLE SimulationSystem::GetPositionBufferSRV()
 {

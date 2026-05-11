@@ -21,7 +21,7 @@ struct SimParams
     uint32_t numParticles = 0;
     uint32_t gridResolution[3];
 
-    float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
+    float velocityDamping = 0.999f; // e.g. = 0.99 or 1.0
     Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f);
 
     float yViscosity = 2.74f;            // exponent in viscosity formula; 2.74 gives ~100x mu drop from 700K to 1400K
@@ -32,7 +32,7 @@ struct SimParams
     float expClampMaxViscosity = 80.0f; // e.g.  80.0
     float muMinViscosity = 0.0f;        // minimum mu after clamp
     float muMaxViscosity = 1000.0f;     // maximum mu after clamp
-    float muNormMaxViscosity = 25.0f;   // value of mu that maps to viscCoeff=1 (for normalization)
+    float muNormMaxViscosity = 2.0f;    // value of mu that maps to viscCoeff=1 (for normalization)
 
     // phase/freeze/melt parameters
     float freezeTemperature = 800.0f;     // temperature below which freezing may occur
@@ -40,8 +40,6 @@ struct SimParams
     float freezeDensityFactor = 0.90f;    // rho_i < rho0 * freezeDensityFactor triggers freezing
     float solidVelocityDamping = 0.1f;    // damping applied to velocities of solid particles
     float dampingTransitionWidth = 50.0f; // temperature width for smoothing damping transition
-
-    // TODO: init method?
 };
 
 // interface for shaders

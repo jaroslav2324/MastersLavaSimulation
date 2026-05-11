@@ -1,4 +1,3 @@
-// #7
 #include "CommonKernels.hlsl"
 
 StructuredBuffer<float3> predicted        : register(t7);
@@ -6,14 +5,13 @@ StructuredBuffer<uint>   particleIndices  : register(t4);
 StructuredBuffer<uint>   cellStart        : register(t5);
 StructuredBuffer<uint>   cellEnd          : register(t6);
 
-StructuredBuffer<float> lambda            : register(t10); // read lambda
+StructuredBuffer<float> lambda            : register(t10);
 
-RWStructuredBuffer<float3> deltaP          : register(u11); // write deltaP
+RWStructuredBuffer<float3> deltaP         : register(u11);
 
-// ---- tunable parameters ----
-static const float kTensile = 0.001f;  // 0.001 .. 0.01; reduced 10x to suppress jitter
+static const float kTensile = 0.001f;
 static const float nTensile = 4.0f;
-static const float deltaQ  = 0.2f;      // in units of h
+static const float deltaQ  = 0.2f;
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -29,7 +27,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     int3 cell = GetCellCoord(pi);
 
-    // Precompute kernel value at deltaQ
+    // Precompute kernel value at deltaQ * h
     float Wdq = cubic_kernel_height(float3(deltaQ * h, 0, 0));
 
     for (int dz = -1; dz <= 1; dz++)
@@ -45,7 +43,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
             continue;
 
         uint hash = GetCellHash(ncell);
-
         uint start = cellStart[hash];
         uint end   = cellEnd[hash];
 
@@ -66,7 +63,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float3 gradW = cubic_kernel_gradient(rij);
             float lj = lambda[j];
 
-            // tensile instability correction
             float W = cubic_kernel_height(rij);
             float scorr = -kTensile * pow(W / Wdq, nTensile);
 
@@ -77,11 +73,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
     dpi /= max(neighbourCount, 1);
 
     float maxDelta = 3.0f * h;
-
     float len = length(dpi);
     if (len > maxDelta)
         dpi *= maxDelta / len;
 
-    //float relaxation = 0.6; 
-    deltaP[i] =  dpi / (rho0 / 10.0f);
+    deltaP[i] = dpi / (rho0 / 10.0f);
 }
