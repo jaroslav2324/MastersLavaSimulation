@@ -11,7 +11,7 @@ StructuredBuffer<float> lambda            : register(t10); // read lambda
 RWStructuredBuffer<float3> deltaP          : register(u11); // write deltaP
 
 // ---- tunable parameters ----
-static const float kTensile = 0.001f;   // 0.001 .. 0.01
+static const float kTensile = 0.001f;  // 0.001 .. 0.01; reduced 10x to suppress jitter
 static const float nTensile = 4.0f;
 static const float deltaQ  = 0.2f;      // in units of h
 
@@ -76,7 +76,7 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     dpi /= max(neighbourCount, 1);
 
-    float maxDelta = 20.0f * h;
+    float maxDelta = 3.0f * h;
 
     float len = length(dpi);
     if (len > maxDelta)

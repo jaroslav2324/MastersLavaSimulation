@@ -1,170 +1,12 @@
 #include "pch.h"
 
 #include "framework/SimulationSystem.h"
+#include "framework/SceneSetup.h"
 #include "framework/RenderTemplatesAPI.h"
 #include "framework/ShaderCompiler.h"
 #include "framework/RenderSubsystem.h"
 #include "framework/UploadHelpers.h"
 #include "GPUSorting/OneSweep.h"
-#include <random>
-
-// Particle generation helpers
-std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateUniformGridPositions(UINT numParticles)
-{
-    std::vector<DirectX::SimpleMath::Vector3> out;
-    out.reserve(numParticles);
-    int n = static_cast<int>(std::ceil(std::cbrt((double)numParticles)));
-    for (int z = 0; z < n && out.size() < numParticles; ++z)
-    {
-        for (int y = 0; y < n && out.size() < numParticles; ++y)
-        {
-            for (int x = 0; x < n && out.size() < numParticles; ++x)
-            {
-                float fx = (x + 0.5f) / (float)n;
-                float fy = (y + 0.5f) / (float)n;
-                float fz = (z + 0.5f) / (float)n;
-                out.emplace_back(fx, fy, fz);
-            }
-        }
-    }
-    return out;
-}
-
-std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDenseRandomPositions(UINT numParticles, unsigned seed)
-{
-    std::vector<DirectX::SimpleMath::Vector3> out;
-    out.reserve(numParticles);
-    std::mt19937 rng(seed);
-    std::uniform_real_distribution<float> u(0.0f, 1.0f);
-
-    // Stratified jittering on a grid for even coverage but denser overall
-    int m = static_cast<int>(std::ceil(std::cbrt((double)numParticles)));
-    for (int z = 0; z < m && out.size() < numParticles; ++z)
-    {
-        for (int y = 0; y < m && out.size() < numParticles; ++y)
-        {
-            for (int x = 0; x < m && out.size() < numParticles; ++x)
-            {
-                float ox = (x + u(rng)) / (float)m;
-                float oy = (y + u(rng)) / (float)m;
-                float oz = (z + u(rng)) / (float)m;
-                out.emplace_back(ox, oy, oz);
-            }
-        }
-    }
-    return out;
-}
-
-std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDenseBottomWithSphere(UINT numParticles)
-{
-    std::vector<DirectX::SimpleMath::Vector3> out;
-    out.reserve(numParticles);
-    std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 5.0f);
-
-    // Allocate fraction of particles to sphere at top-center
-    const UINT sphereCount = static_cast<UINT>(std::round(numParticles * 0.18f));
-    const UINT bottomCount = numParticles - sphereCount;
-
-    for (UINT i = 0; i < bottomCount; ++i)
-    {
-        float x = u(rng);
-        float z = u(rng);
-        float y = u(rng) / 5.0f;
-        out.emplace_back(x, y, z);
-    }
-
-    DirectX::SimpleMath::Vector3 center(2.5f, 2.82f, 2.5f);
-    const float radius = 1.0f;
-    std::uniform_real_distribution<float> uSphere(-radius, radius);
-    while (out.size() < numParticles)
-    {
-        float rx = uSphere(rng);
-        float ry = uSphere(rng);
-        float rz = uSphere(rng);
-        if (rx * rx + ry * ry + rz * rz <= radius * radius)
-        {
-            DirectX::SimpleMath::Vector3 p = center + DirectX::SimpleMath::Vector3(rx, ry, rz);
-            out.push_back(p);
-        }
-    }
-
-    return out;
-}
-
-void SimulationSystem::GenerateTemperaturesForPositions(
-    const std::vector<DirectX::SimpleMath::Vector3> &positions,
-    std::vector<float> &outTemps)
-{
-    const float hotHeight = 1.8f; // TODO: can be moved to args
-
-    outTemps.clear();
-    outTemps.reserve(positions.size());
-
-    std::mt19937 rngTemp(424242);
-
-    std::uniform_real_distribution<float> coldRange(700.0f, 900.0f);
-    std::uniform_real_distribution<float> hotRange(1200.0f, 1400.0f);
-
-    for (const auto &p : positions)
-    {
-        if (p.y >= hotHeight)
-            outTemps.push_back(hotRange(rngTemp));
-        else
-            outTemps.push_back(coldRange(rngTemp));
-    }
-}
-
-std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateDamBreakPositions(UINT numParticles)
-{
-    std::vector<DirectX::SimpleMath::Vector3> out;
-    out.reserve(numParticles);
-    std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 1.0f);
-
-    // Dam break: particles in a rectangular region along the left wall
-    float thickness = 2.0f; // x-direction thickness
-    float height = 5.0f;    // y-direction height
-    float width = 5.0f;     // z-direction width
-
-    // Calculate grid sizes proportionally to the dimensions
-    double volume = thickness * height * width;
-    double cubeRoot = std::cbrt(numParticles / volume);
-    int nx = std::max(1, (int)std::round(thickness * cubeRoot));
-    int ny = std::max(1, (int)std::round(height * cubeRoot));
-    int nz = std::max(1, (int)std::round(width * cubeRoot));
-
-    for (int z = 0; z < nz && out.size() < numParticles; ++z)
-    {
-        for (int y = 0; y < ny && out.size() < numParticles; ++y)
-        {
-            for (int x = 0; x < nx && out.size() < numParticles; ++x)
-            {
-                float fx = (x + u(rng)) / nx * thickness;
-                float fy = (y + u(rng)) / ny * height;
-                float fz = (z + u(rng)) / nz * width;
-                out.emplace_back(fx, fy, fz);
-            }
-        }
-    }
-    return out;
-}
-
-void SimulationSystem::GenerateDamBreakTemperatures(
-    const std::vector<DirectX::SimpleMath::Vector3> &positions,
-    std::vector<float> &outTemps)
-{
-    std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 1.0f);
-
-    outTemps.clear();
-    outTemps.reserve(positions.size());
-
-    for (size_t i = 0; i < positions.size(); ++i)
-    {
-        outTemps.push_back(900.0f + 100.0f * (u(rng) - 0.5f)); // Uniform temperature
-    }
-}
 
 void SimulationSystem::SetMaxParticlesCount(UINT maxParticlesCount)
 {
@@ -219,7 +61,9 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     CreateSimulationKernels();
 
-    std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateDenseBottomWithSphere(m_maxParticlesCount);
+    std::vector<DirectX::SimpleMath::Vector3> hostPositions;
+    std::vector<float> hostTemps;
+    SceneSetup::LoadScene(m_scene, m_maxParticlesCount, hostPositions, hostTemps);
 
     // create upload buffer and copy positions into GPU position buffers using one command list
     UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
@@ -230,10 +74,6 @@ void SimulationSystem::Init(ID3D12Device *device)
     ThrowIfFailed(uploadResource->Map(0, &readRange, &pUpload));
     memcpy(pUpload, hostPositions.data(), (size_t)uploadSize);
     uploadResource->Unmap(0, nullptr);
-
-    // generate temperatures for the positions (centralized helper)
-    std::vector<float> hostTemps;
-    GenerateTemperaturesForPositions(hostPositions, hostTemps);
 
     // upload temperature buffer
     UINT64 tempUploadSize = UINT64(m_maxParticlesCount) * sizeof(float);
@@ -893,6 +733,10 @@ void SimulationSystem::Simulate(float dt)
     m_updatePosVel->Dispatch(cmdList, numParticles);
     UAVBarrierSingle(cmdList, particleSwapBuffers.position.GetWriteBuffer()->resource);
     UAVBarrierSingle(cmdList, particleSwapBuffers.velocity.GetWriteBuffer()->resource);
+
+    // Swap velocity so step 10 (ApplyViscosity) reads step 8's output via t1, not the stale previous-frame buffer
+    particleSwapBuffers.velocity.Swap();
+    SetVelocityPingPongRootSig(cmdList.get(), *allocGPU);
 
     // 9) Viscosity: compute viscosity mu and coefficient from temperature
     m_viscosity->Dispatch(cmdList, numParticles);

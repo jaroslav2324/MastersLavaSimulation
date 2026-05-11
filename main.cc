@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 			}
 			particleCount = static_cast<UINT>(parsed);
 		}
-		catch (...) 
+		catch (...)
 		{
 			std::cout << "Usage: " << argv[0] << " <numParticles>\n";
 			return 1;
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 	TimeAccumulator simTimeAcc;
 	TimeAccumulator renderTimeAcc;
 
-	const int stopAtSimFrames = 10000;
+	const int stopAtSimFrames = 0;
 
 	// SimulationSystem::StartSimulation();
 

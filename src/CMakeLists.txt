@@ -8,6 +8,7 @@ set(SRC_FILES
     src/Cube.cc
     src/InputHandler.cc
     src/UploadHelpers.cc
+    src/SceneSetup.cc
     PARENT_SCOPE 
 )
 
