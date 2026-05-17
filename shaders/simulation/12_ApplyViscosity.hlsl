@@ -27,7 +27,8 @@ void CSMain(uint gid : SV_DispatchThreadID)
         return;
     }
 
-    float3 dv = float3(0,0,0);
+    float3 dv   = float3(0,0,0);
+    float  sumW = 0.0f;
 
     uint3 cell = GetCellCoord(xi);
 
@@ -61,9 +62,15 @@ void CSMain(uint gid : SV_DispatchThreadID)
             if (r2 >= h2) continue;
 
             float W = cubic_kernel_height(rij);
-            dv += (velocitiesIn[j] - vi) * W;
+            dv   += (velocitiesIn[j] - vi) * W;
+            sumW += W;
         }
     }
 
-    velocities[i] = vi + ci * dv;
+    // Normalize by max(actual kernel sum, rho0):
+    // - at rest density sumW ≈ rho0 → same as /rho0
+    // - overdense (sumW > rho0) → reduces correction, prevents overshoot / oscillation
+    // - underdense (sumW < rho0) → use rho0 to avoid over-amplifying sparse regions
+    float norm = max(sumW, rho0);
+    velocities[i] = vi + ci * (dv / norm);
 }

@@ -15,7 +15,8 @@ struct SimParams
     float epsHeatTransfer; // h^2, stabilizer
     float cellSize;
 
-    float qViscosity = 0.1f; // TODO: check; // parameter from viscosity formula
+    // q=58, y=8.7 tuned so cold(800K)->viscCoeff≈0.9, hot(1300K)->viscCoeff≈0.008
+    float qViscosity = 58.0f;
     Vector3 worldOrigin = Vector3(0.0f, 0.0f, 0.0f);
 
     uint32_t numParticles = 0;
@@ -24,7 +25,7 @@ struct SimParams
     float velocityDamping = 1.0f; // e.g. = 0.99 or 1.0
     Vector3 gravityVec = Vector3(0.0f, -9.81f, 0.0f);
 
-    float yViscosity = 1.0f;             // exponent in viscosity formula
+    float yViscosity = 8.7f;             // exponent in viscosity formula
     float gammaViscosity = 1.0f;         // γ offset
     float TminViscosity = 1e-3f;         // clamp for temperature (e.g. 1e-3)
     float expClampMinViscosity = -80.0f; // e.g. -80.0
@@ -32,7 +33,7 @@ struct SimParams
     float expClampMaxViscosity = 80.0f; // e.g.  80.0
     float muMinViscosity = 0.0f;        // minimum mu after clamp
     float muMaxViscosity = 10.0f;       // maximum mu after clamp
-    float muNormMaxViscosity = 1.0f;    // value of mu that maps to viscCoeff=1 (for normalization)
+    float muNormMaxViscosity = 1.5f;    // value of mu that maps to viscCoeff=1 (for normalization)
 
     // phase/freeze/melt parameters
     float freezeTemperature = 800.0f;     // temperature below which freezing may occur

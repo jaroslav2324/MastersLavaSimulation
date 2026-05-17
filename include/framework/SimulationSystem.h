@@ -47,9 +47,11 @@ public:
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseBottomWithSphere(UINT numParticles);
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseRandomPositions(UINT numParticles, unsigned seed = 1337);
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDamBreakPositions(UINT numParticles);
+    static std::vector<DirectX::SimpleMath::Vector3> GenerateTwoSpheresPositions(UINT numParticles);
     // Generate temperatures for a set of positions according to scene rules
     static void GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
     static void GenerateDamBreakTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
+    static void GenerateTwoSpheresTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
@@ -100,7 +102,7 @@ private:
     inline static UINT m_pingPongSrvBase = 0;
     inline static UINT m_pingPongUavBase = 0;
 
-    const static int m_gridCellsCount = 1 << 16;
+    const static int m_gridCellsCount = 1 << 14;
     inline static UINT m_maxParticlesCount = (1 << 15); //(1 << 16) + (1 << 15); //(1 << 16) + (1 << 14); // + + (1 << 13); //; // ;
     inline static unsigned int m_currentSwapIndex = 0;
 

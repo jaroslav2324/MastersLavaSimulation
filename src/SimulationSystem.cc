@@ -166,6 +166,58 @@ void SimulationSystem::GenerateDamBreakTemperatures(
     }
 }
 
+// Two-sphere demo scene: cold sphere (left, x~2.5) and hot sphere (right, x~7.5)
+std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateTwoSpheresPositions(UINT numParticles)
+{
+    std::vector<DirectX::SimpleMath::Vector3> out;
+    out.reserve(numParticles);
+    std::mt19937 rng(1337);
+
+    UINT coldCount = numParticles / 2;
+
+    const float yHeight = 1.5f;
+    const float radius = 1.5f;
+    std::uniform_real_distribution<float> uSphere(-radius, radius);
+
+    // Cold sphere — left side of the world
+    DirectX::SimpleMath::Vector3 coldCenter(2.5f, yHeight, 5.0f);
+    while (out.size() < coldCount)
+    {
+        float rx = uSphere(rng), ry = uSphere(rng), rz = uSphere(rng);
+        if (rx * rx + ry * ry + rz * rz <= radius * radius)
+            out.push_back(coldCenter + DirectX::SimpleMath::Vector3(rx, ry, rz));
+    }
+
+    // Hot sphere — right side of the world
+    DirectX::SimpleMath::Vector3 hotCenter(7.5f, yHeight, 5.0f);
+    while (out.size() < numParticles)
+    {
+        float rx = uSphere(rng), ry = uSphere(rng), rz = uSphere(rng);
+        if (rx * rx + ry * ry + rz * rz <= radius * radius)
+            out.push_back(hotCenter + DirectX::SimpleMath::Vector3(rx, ry, rz));
+    }
+
+    return out;
+}
+
+void SimulationSystem::GenerateTwoSpheresTemperatures(
+    const std::vector<DirectX::SimpleMath::Vector3> &positions,
+    std::vector<float> &outTemps)
+{
+    outTemps.clear();
+    outTemps.reserve(positions.size());
+
+    std::mt19937 rng(424242);
+    std::uniform_real_distribution<float> coldRange(700.0f, 900.0f);
+    std::uniform_real_distribution<float> hotRange(1200.0f, 1400.0f);
+
+    // x < 5.0 → cold sphere (left), x >= 5.0 → hot sphere (right)
+    for (const auto &p : positions)
+    {
+        outTemps.push_back((p.x < 5.0f) ? coldRange(rng) : hotRange(rng));
+    }
+}
+
 void SimulationSystem::SetMaxParticlesCount(UINT maxParticlesCount)
 {
     m_maxParticlesCount = maxParticlesCount;
@@ -219,7 +271,7 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     CreateSimulationKernels();
 
-    std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateDenseBottomWithSphere(m_maxParticlesCount);
+    std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateTwoSpheresPositions(m_maxParticlesCount);
 
     // create upload buffer and copy positions into GPU position buffers using one command list
     UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
@@ -231,9 +283,9 @@ void SimulationSystem::Init(ID3D12Device *device)
     memcpy(pUpload, hostPositions.data(), (size_t)uploadSize);
     uploadResource->Unmap(0, nullptr);
 
-    // generate temperatures for the positions (centralized helper)
+    // generate temperatures for the two-sphere scene
     std::vector<float> hostTemps;
-    GenerateTemperaturesForPositions(hostPositions, hostTemps);
+    GenerateTwoSpheresTemperatures(hostPositions, hostTemps);
 
     // upload temperature buffer
     UINT64 tempUploadSize = UINT64(m_maxParticlesCount) * sizeof(float);
@@ -250,6 +302,29 @@ void SimulationSystem::Init(ID3D12Device *device)
     ThrowIfFailed(uploadPhaseResource->Map(0, &readRange, &pUploadPhase));
     memset(pUploadPhase, static_cast<int>(ParticlePhase::Liquid), (size_t)phaseUploadSize);
     uploadPhaseResource->Unmap(0, nullptr);
+
+    // upload initial velocities: hot particles get a small radially-outward impulse
+    std::vector<DirectX::SimpleMath::Vector3> hostVelocities(m_maxParticlesCount, {0.0f, 0.0f, 0.0f});
+    {
+        const DirectX::SimpleMath::Vector3 hotCenter(7.5f, 5.0f, 5.0f);
+        const float hotInitSpeed = 0.05f;
+        for (UINT i = 0; i < m_maxParticlesCount; ++i)
+        {
+            if (hostTemps[i] >= m_simParams.meltTemperature)
+            {
+                auto dir = hostPositions[i] - hotCenter;
+                float len = dir.Length();
+                if (len > 1e-6f)
+                    hostVelocities[i] = dir / len * hotInitSpeed;
+            }
+        }
+    }
+    UINT64 velUploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
+    auto uploadVelResource = UploadHelpers::CreateUploadBuffer(device, velUploadSize);
+    void *pUploadVel = nullptr;
+    ThrowIfFailed(uploadVelResource->Map(0, &readRange, &pUploadVel));
+    memcpy(pUploadVel, hostVelocities.data(), (size_t)velUploadSize);
+    uploadVelResource->Unmap(0, nullptr);
 
     // prepare single command allocator/list to perform GPU copies for both swap buffers
     winrt::com_ptr<ID3D12CommandAllocator> cmdAlloc;
@@ -297,6 +372,23 @@ void SimulationSystem::Init(ID3D12Device *device)
         uploadPhaseResource.get(),
         particleScratchBuffers.phase->resource.get(),
         phaseUploadSize,
+        D3D12_RESOURCE_STATE_COMMON,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    // copy initial velocities into both velocity swap buffers
+    UploadHelpers::CopyBufferToResource(
+        cmdList.get(),
+        uploadVelResource.get(),
+        particleSwapBuffers.velocity.buffers[0]->resource.get(),
+        velUploadSize,
+        D3D12_RESOURCE_STATE_COMMON,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    UploadHelpers::CopyBufferToResource(
+        cmdList.get(),
+        uploadVelResource.get(),
+        particleSwapBuffers.velocity.buffers[1]->resource.get(),
+        velUploadSize,
         D3D12_RESOURCE_STATE_COMMON,
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
