@@ -633,8 +633,6 @@ void SimulationSystem::Simulate(float dt)
         return;
     }
 
-    dt = std::min(dt, 0.167f); // clamp delta time to avoid instability from large steps
-
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
 
     static uint64_t fenceVal = 0;

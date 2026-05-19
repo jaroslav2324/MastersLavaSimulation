@@ -93,8 +93,8 @@ private:
     inline static UINT m_pingPongSrvBase = 0;
     inline static UINT m_pingPongUavBase = 0;
 
-    const static int m_gridCellsCount = 1 << 14;
-    inline static UINT m_maxParticlesCount = (1 << 15);
+    const static int m_gridCellsCount = 1 << 15;
+    inline static UINT m_maxParticlesCount = (1 << 16) + (1 << 15) + (1 << 13);
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;

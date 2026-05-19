@@ -1,6 +1,15 @@
 #include "framework/SceneSetup.h"
 #include <random>
 
+// TODO: calculate from desired density
+// Reference particle count for scene scaling.
+static constexpr UINT kSceneRef = 4096;
+
+static float SceneFactor(UINT numParticles)
+{
+    return std::cbrt(static_cast<float>(numParticles) / static_cast<float>(kSceneRef));
+}
+
 static std::vector<Vector3> GenerateUniformGrid(UINT numParticles)
 {
     std::vector<Vector3> out;
@@ -29,10 +38,12 @@ static std::vector<Vector3> GenerateDenseRandom(UINT numParticles, unsigned seed
 
 static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
 {
+    const float s = SceneFactor(numParticles);
+
     std::vector<Vector3> out;
     out.reserve(numParticles);
     std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 5.0f);
+    std::uniform_real_distribution<float> u(0.0f, 5.0f * s);
 
     const UINT sphereCount = static_cast<UINT>(std::round(numParticles * 0.18f));
     const UINT bottomCount = numParticles - sphereCount;
@@ -40,8 +51,8 @@ static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
     for (UINT i = 0; i < bottomCount; ++i)
         out.emplace_back(u(rng), u(rng) / 5.0f, u(rng));
 
-    Vector3 center(2.5f, 2.82f, 2.5f);
-    const float radius = 1.0f;
+    Vector3 center(2.5f * s, 2.82f * s, 2.5f * s);
+    const float radius = 1.0f * s;
     std::uniform_real_distribution<float> uSphere(-radius, radius);
     while (out.size() < numParticles)
     {
@@ -54,12 +65,14 @@ static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
 
 static std::vector<Vector3> GenerateDamBreak(UINT numParticles)
 {
+    const float s = SceneFactor(numParticles);
+
     std::vector<Vector3> out;
     out.reserve(numParticles);
     std::mt19937 rng(1337);
     std::uniform_real_distribution<float> u(0.0f, 1.0f);
 
-    float thickness = 2.0f, height = 5.0f, width = 5.0f;
+    float thickness = 2.0f * s, height = 5.0f * s, width = 5.0f * s;
     double cubeRoot = std::cbrt(numParticles / (thickness * height * width));
     int nx = std::max(1, (int)std::round(thickness * cubeRoot));
     int ny = std::max(1, (int)std::round(height * cubeRoot));
@@ -95,6 +108,8 @@ static void GenerateTwoSpheres(UINT numParticles,
                                std::vector<Vector3> &outPositions,
                                std::vector<float> &outTemperatures)
 {
+    const float s = SceneFactor(numParticles);
+
     outPositions.clear();
     outPositions.reserve(numParticles);
     outTemperatures.clear();
@@ -104,10 +119,9 @@ static void GenerateTwoSpheres(UINT numParticles,
     std::uniform_real_distribution<float> hotRange(1300.0f, 1500.0f);
     std::uniform_real_distribution<float> coldRange(600.0f, 800.0f);
 
-    const float radius = 0.85f;
-    // Spheres rest on the ground (y_center = radius), separated in x.
-    Vector3 hotCenter(2.5f, radius, 2.5f);
-    Vector3 coldCenter(5.0f, radius, 2.5f);
+    const float radius = 0.85f * s;
+    Vector3 hotCenter(2.5f * s, radius, 2.5f * s);
+    Vector3 coldCenter(5.0f * s, radius, 2.5f * s);
 
     UINT hotCount = numParticles / 2;
     UINT coldCount = numParticles - hotCount;
@@ -122,9 +136,9 @@ static void GenerateTwoSpheres(UINT numParticles,
 }
 
 static void GenerateTemperaturesForPositions(const std::vector<Vector3> &positions,
-                                             std::vector<float> &outTemps)
+                                             std::vector<float> &outTemps,
+                                             float hotHeight = 1.8f)
 {
-    const float hotHeight = 1.8f;
     outTemps.clear();
     outTemps.reserve(positions.size());
     std::mt19937 rng(424242);
@@ -163,7 +177,8 @@ void SceneSetup::LoadScene(SceneType scene, UINT numParticles,
 
     case SceneType::DenseBottomWithSphere:
         outPositions = GenerateDenseBottomWithSphere(numParticles);
-        GenerateTemperaturesForPositions(outPositions, outTemperatures);
+        GenerateTemperaturesForPositions(outPositions, outTemperatures,
+                                         1.8f * SceneFactor(numParticles));
         break;
 
     case SceneType::DamBreak:

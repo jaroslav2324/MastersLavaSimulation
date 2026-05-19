@@ -4,7 +4,7 @@ cbuffer Globals : register(b0)
     float4x4 view;
     float4x4 invView;
     float4x4 proj;
-    float3 globalLightDirection;  // world-space direction light travels, normalized
+    float3 globalLightDirection; 
     float nearPlane;
     float farPlane;
     float particleRadius;
@@ -21,7 +21,7 @@ struct VSOut
     float  temp      : TEXCOORD1;
     float3 billRight : TEXCOORD2;
     float3 billUp    : TEXCOORD3;
-    float3 billFwd   : TEXCOORD4;  // sphere center -> camera, i.e. sphere front normal
+    float3 billFwd   : TEXCOORD4;  
 };
 
 VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
@@ -42,8 +42,6 @@ VSOut VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     float2 corner = corners[vertexID % 4];
     o.uv = corner;
 
-    // Build billboard axes from sphere-center-to-camera direction so that
-    // in-place camera rotation doesn't change the billboard orientation.
     float3 cameraPos = float3(invView[0][3], invView[1][3], invView[2][3]);
     float3 toCamera  = normalize(cameraPos - center);
 
