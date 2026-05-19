@@ -4,7 +4,7 @@ class Camera
 {
 private:
     Vector3 position;
-    Quaternion rotation;
+    Quaternion rotation; // TODO: something is wrong with it
 
 public:
     Camera();

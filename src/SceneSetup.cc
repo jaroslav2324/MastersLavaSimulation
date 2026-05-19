@@ -1,14 +1,31 @@
 #include "framework/SceneSetup.h"
 #include <random>
 
-// TODO: calculate from desired density
 // Reference particle count for scene scaling.
+// TODO: calculate from desired density?
 static constexpr UINT kSceneRef = 4096;
+static constexpr float kGridMargin = 0.95f; // keep particles this fraction inside the grid
 
-static float SceneFactor(UINT numParticles)
+static float SceneScale(UINT numParticles)
 {
     return std::cbrt(static_cast<float>(numParticles) / static_cast<float>(kSceneRef));
 }
+
+// Analytical max extent (from origin) of each scene at unit scale, on any axis.
+// Used to clamp scale so that all generated particles fit inside the grid.
+static constexpr float kExtentTwoSpheres = 5.85f;           // coldCenter.x + radius = 5.0 + 0.85
+static constexpr float kExtentDenseBottomWithSphere = 5.0f; // flat region [0,5] in x/z
+static constexpr float kExtentDamBreak = 5.0f;              // height/width = 5
+
+static float ClampedSceneScale(UINT numParticles, float baseExtent, float gridWorldSize)
+{
+    float scale = SceneScale(numParticles);
+    if (gridWorldSize > 0.0f)
+        scale = std::min(scale, gridWorldSize * kGridMargin / baseExtent);
+    return scale;
+}
+
+// ---------------------------------------------------------------------------
 
 static std::vector<Vector3> GenerateUniformGrid(UINT numParticles)
 {
@@ -36,14 +53,12 @@ static std::vector<Vector3> GenerateDenseRandom(UINT numParticles, unsigned seed
     return out;
 }
 
-static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
+static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles, float scale)
 {
-    const float s = SceneFactor(numParticles);
-
     std::vector<Vector3> out;
     out.reserve(numParticles);
     std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> u(0.0f, 5.0f * s);
+    std::uniform_real_distribution<float> u(0.0f, 5.0f * scale);
 
     const UINT sphereCount = static_cast<UINT>(std::round(numParticles * 0.18f));
     const UINT bottomCount = numParticles - sphereCount;
@@ -51,8 +66,8 @@ static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
     for (UINT i = 0; i < bottomCount; ++i)
         out.emplace_back(u(rng), u(rng) / 5.0f, u(rng));
 
-    Vector3 center(2.5f * s, 2.82f * s, 2.5f * s);
-    const float radius = 1.0f * s;
+    Vector3 center(2.5f * scale, 2.82f * scale, 2.5f * scale);
+    const float radius = 1.0f * scale;
     std::uniform_real_distribution<float> uSphere(-radius, radius);
     while (out.size() < numParticles)
     {
@@ -63,16 +78,14 @@ static std::vector<Vector3> GenerateDenseBottomWithSphere(UINT numParticles)
     return out;
 }
 
-static std::vector<Vector3> GenerateDamBreak(UINT numParticles)
+static std::vector<Vector3> GenerateDamBreak(UINT numParticles, float scale)
 {
-    const float s = SceneFactor(numParticles);
-
     std::vector<Vector3> out;
     out.reserve(numParticles);
     std::mt19937 rng(1337);
     std::uniform_real_distribution<float> u(0.0f, 1.0f);
 
-    float thickness = 2.0f * s, height = 5.0f * s, width = 5.0f * s;
+    float thickness = 2.0f * scale, height = 5.0f * scale, width = 5.0f * scale;
     double cubeRoot = std::cbrt(numParticles / (thickness * height * width));
     int nx = std::max(1, (int)std::round(thickness * cubeRoot));
     int ny = std::max(1, (int)std::round(height * cubeRoot));
@@ -104,12 +117,10 @@ static void FillSphere(std::vector<Vector3> &out, UINT count,
     }
 }
 
-static void GenerateTwoSpheres(UINT numParticles,
+static void GenerateTwoSpheres(UINT numParticles, float scale,
                                std::vector<Vector3> &outPositions,
                                std::vector<float> &outTemperatures)
 {
-    const float s = SceneFactor(numParticles);
-
     outPositions.clear();
     outPositions.reserve(numParticles);
     outTemperatures.clear();
@@ -119,9 +130,9 @@ static void GenerateTwoSpheres(UINT numParticles,
     std::uniform_real_distribution<float> hotRange(1300.0f, 1500.0f);
     std::uniform_real_distribution<float> coldRange(600.0f, 800.0f);
 
-    const float radius = 0.85f * s;
-    Vector3 hotCenter(2.5f * s, radius, 2.5f * s);
-    Vector3 coldCenter(5.0f * s, radius, 2.5f * s);
+    const float radius = 0.85f * scale;
+    Vector3 hotCenter(2.5f * scale, radius, 2.5f * scale);
+    Vector3 coldCenter(5.0f * scale, radius, 2.5f * scale);
 
     UINT hotCount = numParticles / 2;
     UINT coldCount = numParticles - hotCount;
@@ -161,7 +172,8 @@ static void GenerateDamBreakTemperatures(const std::vector<Vector3> &positions,
 
 void SceneSetup::LoadScene(SceneType scene, UINT numParticles,
                            std::vector<Vector3> &outPositions,
-                           std::vector<float> &outTemperatures)
+                           std::vector<float> &outTemperatures,
+                           float gridWorldSize)
 {
     switch (scene)
     {
@@ -176,18 +188,26 @@ void SceneSetup::LoadScene(SceneType scene, UINT numParticles,
         break;
 
     case SceneType::DenseBottomWithSphere:
-        outPositions = GenerateDenseBottomWithSphere(numParticles);
-        GenerateTemperaturesForPositions(outPositions, outTemperatures,
-                                         1.8f * SceneFactor(numParticles));
+    {
+        float scale = ClampedSceneScale(numParticles, kExtentDenseBottomWithSphere, gridWorldSize);
+        outPositions = GenerateDenseBottomWithSphere(numParticles, scale);
+        GenerateTemperaturesForPositions(outPositions, outTemperatures, 1.8f * scale);
         break;
+    }
 
     case SceneType::DamBreak:
-        outPositions = GenerateDamBreak(numParticles);
+    {
+        float scale = ClampedSceneScale(numParticles, kExtentDamBreak, gridWorldSize);
+        outPositions = GenerateDamBreak(numParticles, scale);
         GenerateDamBreakTemperatures(outPositions, outTemperatures);
         break;
+    }
 
     case SceneType::TwoSpheres:
-        GenerateTwoSpheres(numParticles, outPositions, outTemperatures);
+    {
+        float scale = ClampedSceneScale(numParticles, kExtentTwoSpheres, gridWorldSize);
+        GenerateTwoSpheres(numParticles, scale, outPositions, outTemperatures);
         break;
+    }
     }
 }

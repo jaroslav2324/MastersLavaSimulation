@@ -49,12 +49,15 @@ int main(int argc, char **argv)
 	TimeAccumulator simTimeAcc;
 	TimeAccumulator renderTimeAcc;
 
-	const int stopAtSimFrames = 0;
+	const int stopAtSimFrames = 10000;	  // 0 = disabled
+	const double stopAtSimSeconds = 90.0; // 0.0 = disabled
 
-	// SimulationSystem::StartSimulation();
+	double elapsedSimSeconds = 0.0;
 
 	MSG msg = {};
-	while (msg.message != WM_QUIT && (stopAtSimFrames == 0 || simTimeAcc.count() < stopAtSimFrames))
+	while (msg.message != WM_QUIT &&
+		   (stopAtSimFrames == 0 || simTimeAcc.count() < (size_t)stopAtSimFrames) &&
+		   (stopAtSimSeconds <= 0.0 || elapsedSimSeconds < stopAtSimSeconds))
 	{
 		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
@@ -68,6 +71,10 @@ int main(int argc, char **argv)
 			lastTime = currentTime;
 
 			bool simulationEnabled = SimulationSystem::IsRunning();
+			if (simulationEnabled)
+			{
+				elapsedSimSeconds += deltaTime.count();
+			}
 
 			{
 				ConditionalScopedTimer simTimer(simulationEnabled ? &simTimeAcc : nullptr);
@@ -87,6 +94,7 @@ int main(int argc, char **argv)
 
 	std::cout << "\n=== Frame Timing Stats ===\n";
 	std::cout << "Frames measured : " << simTimeAcc.count() << "\n";
+	std::cout << "Elapsed sim time: " << elapsedSimSeconds << " s\n";
 	std::cout << "Simulation avg  : " << simAvg << " ms\n";
 	std::cout << "Render avg      : " << renAvg << " ms\n";
 	std::cout << "Total avg       : " << total << " ms\n";

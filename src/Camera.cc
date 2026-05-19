@@ -9,7 +9,7 @@ Camera::Camera()
     // TODO: change in render subsystem instead
     // position = Vector3(0.0f, 0.0f, 1.0f);
     // rotation = Quaternion::Identity;
-    position = Vector3(2.5f, 3.0f, 10.0f);
+    position = Vector3(7.4f, 2.0f, 12.8f);
     rotation = Quaternion::CreateFromYawPitchRoll(
         DirectX::XM_PI, // yaw
         0.0f,           // pitch

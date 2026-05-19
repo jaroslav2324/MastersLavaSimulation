@@ -20,6 +20,12 @@
 #include "simulation/HeatTransferKernel.h"
 #include "simulation/CollisionProjectionKernel.h"
 
+enum class SimTimeStepMode
+{
+    RealTimeStep, // use dt passed from the render loop
+    FixedStep,    // use a fixed timestep regardless of frame time
+};
+
 class SimulationSystem
 {
 public:
@@ -33,12 +39,17 @@ public:
     static void StartSimulation() { isRunning = true; };
     static void StopSimulation() { isRunning = false; };
 
+    static void SetTimeStepMode(SimTimeStepMode mode) { m_timeStepMode = mode; }
+    static SimTimeStepMode GetTimeStepMode() { return m_timeStepMode; }
+
+    // remember that dt is ignored in FixedStep mode
     static void Simulate(float dt);
 
     static D3D12_GPU_DESCRIPTOR_HANDLE GetPositionBufferSRV();
     static D3D12_GPU_DESCRIPTOR_HANDLE GetTemperatureBufferSRV();
     static uint32_t GetNumParticles() { return m_simParams.numParticles; }
     static float GetKernelRadius() { return m_simParams.h; }
+    static float GetGridWorldSize() { return m_simParams.gridResolution[0] * m_simParams.cellSize; }
 
     // GPU sync helpers for render-simulation coordination
     static uint64_t GetLastSimulateFenceValue();
@@ -94,7 +105,7 @@ private:
     inline static UINT m_pingPongUavBase = 0;
 
     const static int m_gridCellsCount = 1 << 15;
-    inline static UINT m_maxParticlesCount = (1 << 16) + (1 << 15) + (1 << 13);
+    inline static UINT m_maxParticlesCount = (1 << 15);
     inline static unsigned int m_currentSwapIndex = 0;
 
     inline static ParticleStateSwapBuffers particleSwapBuffers;
@@ -103,4 +114,7 @@ private:
 
     inline static bool isRunning = false;
     inline static SceneType m_scene = SceneType::TwoSpheres;
+
+    static constexpr float kFixedTimeStep = 1.0f / 60.0f; // ~0.0167 s
+    inline static SimTimeStepMode m_timeStepMode = SimTimeStepMode::FixedStep;
 };

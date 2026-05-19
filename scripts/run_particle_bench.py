@@ -13,7 +13,7 @@ def main():
             f"Executable not found: {exe_path}\nPlease build the project before running this script."
         )
 
-    counts = [((8 << 10) * i) for i in range(1, 13)]  # 8192, 16384, ..., 98304
+    counts = [((8 << 10) * i) for i in range(1, 32)]  # 8192, 16384, ..., ~256000
     output_csv = repo_root / "bench_results.csv"
 
     with output_csv.open("w", newline="", encoding="utf-8") as csvfile:

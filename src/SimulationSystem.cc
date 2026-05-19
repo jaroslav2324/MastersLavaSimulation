@@ -63,7 +63,7 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     std::vector<DirectX::SimpleMath::Vector3> hostPositions;
     std::vector<float> hostTemps;
-    SceneSetup::LoadScene(m_scene, m_maxParticlesCount, hostPositions, hostTemps);
+    SceneSetup::LoadScene(m_scene, m_maxParticlesCount, hostPositions, hostTemps, GetGridWorldSize());
 
     // create upload buffer and copy positions into GPU position buffers using one command list
     UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
@@ -631,6 +631,11 @@ void SimulationSystem::Simulate(float dt)
     if (!isRunning)
     {
         return;
+    }
+
+    if (m_timeStepMode == SimTimeStepMode::FixedStep)
+    {
+        dt = kFixedTimeStep;
     }
 
     winrt::com_ptr<ID3D12Device> device = RenderSubsystem::GetDevice();
