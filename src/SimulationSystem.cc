@@ -218,6 +218,112 @@ void SimulationSystem::GenerateTwoSpheresTemperatures(
     }
 }
 
+// Frozen block at the bottom center + hot sphere above it falling down
+std::vector<DirectX::SimpleMath::Vector3> SimulationSystem::GenerateFrozenBlockHotSpherePositions(UINT numParticles)
+{
+    std::vector<DirectX::SimpleMath::Vector3> out;
+    out.reserve(numParticles);
+
+    const UINT blockCount = (UINT)(numParticles * 0.60f);
+    const UINT sphereCount = numParticles - blockCount;
+
+    // Frozen block: x=[3.5,6.5], y=[0,2.0], z=[4.2,5.8] — compact volume for density ~rho0
+    const float bx = 2.0f, by = 1.5f, bz = 1.0f;
+    const DirectX::SimpleMath::Vector3 blockOrigin(3.5f, 0.0f, 4.2f);
+
+    double cubeRoot = std::cbrt((double)blockCount / (bx * by * bz));
+    int nx = std::max(1, (int)std::round(bx * cubeRoot));
+    int ny = std::max(1, (int)std::round(by * cubeRoot));
+    int nz = std::max(1, (int)std::round(bz * cubeRoot));
+
+    // Use centered grid points (no jitter) for uniform density in the solid block
+    for (int z = 0; z < nz && out.size() < blockCount; ++z)
+        for (int y = 0; y < ny && out.size() < blockCount; ++y)
+            for (int x = 0; x < nx && out.size() < blockCount; ++x)
+            {
+                float fx = blockOrigin.x + (x + 0.5f) / nx * bx;
+                float fy = blockOrigin.y + (y + 0.5f) / ny * by;
+                float fz = blockOrigin.z + (z + 0.5f) / nz * bz;
+                out.emplace_back(fx, fy, fz);
+            }
+
+    // Hot sphere: center (5, 5.5, 5)
+    // Sphere step is derived from rho0 target density independently of block dimensions.
+    // For the cubic spline kernel: rho = W(0) + 6*W(s).
+    // At equilibrium rho0=2800: step ≈ 0.0799 (precomputed for h=0.1, mass=1).
+    const float sphereStep = 0.0799f;
+    const float sphereRadius = 1.18f;
+    const DirectX::SimpleMath::Vector3 sphereCenter(5.0f, 1.5f, 6.5f);
+
+    // Collect ALL grid points inside the sphere, then take innermost sphereCount
+    // to guarantee symmetric filling regardless of sphereCount vs. grid point count.
+    struct SphPoint
+    {
+        DirectX::SimpleMath::Vector3 pos;
+        float dist2;
+    };
+    std::vector<SphPoint> spherePts;
+    spherePts.reserve(sphereCount + 2000);
+
+    int nSphere = (int)std::ceil(2.0f * sphereRadius / sphereStep) + 2;
+    for (int sz = 0; sz < nSphere; ++sz)
+        for (int sy = 0; sy < nSphere; ++sy)
+            for (int sx = 0; sx < nSphere; ++sx)
+            {
+                float px = sphereCenter.x - sphereRadius + (sx + 0.5f) * sphereStep;
+                float py = sphereCenter.y - sphereRadius + (sy + 0.5f) * sphereStep;
+                float pz = sphereCenter.z - sphereRadius + (sz + 0.5f) * sphereStep;
+                float dx = px - sphereCenter.x, dy = py - sphereCenter.y, dz = pz - sphereCenter.z;
+                float d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 <= sphereRadius * sphereRadius)
+                    spherePts.push_back({DirectX::SimpleMath::Vector3(px, py, pz), d2});
+            }
+
+    // Sort innermost-first so the chosen subset is symmetric around the center
+    std::sort(spherePts.begin(), spherePts.end(),
+              [](const SphPoint &a, const SphPoint &b)
+              { return a.dist2 < b.dist2; });
+
+    UINT take = std::min((UINT)spherePts.size(), sphereCount);
+    for (UINT i = 0; i < take; ++i)
+        out.push_back(spherePts[i].pos);
+
+    return out;
+}
+
+void SimulationSystem::GenerateFrozenBlockHotSphereTemperatures(
+    const std::vector<DirectX::SimpleMath::Vector3> &positions,
+    std::vector<float> &outTemps)
+{
+    outTemps.clear();
+    outTemps.reserve(positions.size());
+
+    std::mt19937 rng(424242);
+    std::uniform_real_distribution<float> frozenRange(400.0f, 600.0f); // well below freeze temp
+    std::uniform_real_distribution<float> hotRange(1200.0f, 1400.0f);
+
+    const DirectX::SimpleMath::Vector3 sphereCenter(5.0f, 1.5f, 6.5f);
+    const float radius = 1.18f;
+
+    for (const auto &p : positions)
+    {
+        auto d = p - sphereCenter;
+        bool inSphere = d.x * d.x + d.y * d.y + d.z * d.z <= radius * radius;
+        outTemps.push_back(inSphere ? hotRange(rng) : frozenRange(rng));
+    }
+}
+
+void SimulationSystem::GenerateFrozenBlockHotSpherePhases(
+    const std::vector<float> &temps,
+    std::vector<uint32_t> &outPhases)
+{
+    outPhases.clear();
+    outPhases.reserve(temps.size());
+    for (float t : temps)
+        outPhases.push_back(t < 800.0f ? static_cast<uint32_t>(ParticlePhase::Solid)
+                                       : static_cast<uint32_t>(ParticlePhase::Liquid));
+}
+
 void SimulationSystem::SetMaxParticlesCount(UINT maxParticlesCount)
 {
     m_maxParticlesCount = maxParticlesCount;
@@ -271,7 +377,7 @@ void SimulationSystem::Init(ID3D12Device *device)
 
     CreateSimulationKernels();
 
-    std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateTwoSpheresPositions(m_maxParticlesCount);
+    std::vector<DirectX::SimpleMath::Vector3> hostPositions = GenerateFrozenBlockHotSpherePositions(m_maxParticlesCount);
 
     // create upload buffer and copy positions into GPU position buffers using one command list
     UINT64 uploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
@@ -283,9 +389,9 @@ void SimulationSystem::Init(ID3D12Device *device)
     memcpy(pUpload, hostPositions.data(), (size_t)uploadSize);
     uploadResource->Unmap(0, nullptr);
 
-    // generate temperatures for the two-sphere scene
+    // generate temperatures and phases for the frozen block + hot sphere scene
     std::vector<float> hostTemps;
-    GenerateTwoSpheresTemperatures(hostPositions, hostTemps);
+    GenerateFrozenBlockHotSphereTemperatures(hostPositions, hostTemps);
 
     // upload temperature buffer
     UINT64 tempUploadSize = UINT64(m_maxParticlesCount) * sizeof(float);
@@ -295,30 +401,17 @@ void SimulationSystem::Init(ID3D12Device *device)
     memcpy(pUploadTemp, hostTemps.data(), (size_t)tempUploadSize);
     uploadTempResource->Unmap(0, nullptr);
 
-    // upload phase buffer (initialize all to liquid)
+    // upload phase buffer: frozen block = Solid, hot sphere = Liquid
+    std::vector<uint32_t> hostPhases;
+    GenerateFrozenBlockHotSpherePhases(hostTemps, hostPhases);
     UINT64 phaseUploadSize = UINT64(m_maxParticlesCount) * sizeof(uint32_t);
     auto uploadPhaseResource = UploadHelpers::CreateUploadBuffer(device, phaseUploadSize);
     void *pUploadPhase = nullptr;
     ThrowIfFailed(uploadPhaseResource->Map(0, &readRange, &pUploadPhase));
-    memset(pUploadPhase, static_cast<int>(ParticlePhase::Liquid), (size_t)phaseUploadSize);
+    memcpy(pUploadPhase, hostPhases.data(), (size_t)phaseUploadSize);
     uploadPhaseResource->Unmap(0, nullptr);
 
-    // upload initial velocities: hot particles get a small radially-outward impulse
     std::vector<DirectX::SimpleMath::Vector3> hostVelocities(m_maxParticlesCount, {0.0f, 0.0f, 0.0f});
-    {
-        const DirectX::SimpleMath::Vector3 hotCenter(7.5f, 5.0f, 5.0f);
-        const float hotInitSpeed = 0.05f;
-        for (UINT i = 0; i < m_maxParticlesCount; ++i)
-        {
-            if (hostTemps[i] >= m_simParams.meltTemperature)
-            {
-                auto dir = hostPositions[i] - hotCenter;
-                float len = dir.Length();
-                if (len > 1e-6f)
-                    hostVelocities[i] = dir / len * hotInitSpeed;
-            }
-        }
-    }
     UINT64 velUploadSize = UINT64(m_maxParticlesCount) * sizeof(DirectX::SimpleMath::Vector3);
     auto uploadVelResource = UploadHelpers::CreateUploadBuffer(device, velUploadSize);
     void *pUploadVel = nullptr;

@@ -7,6 +7,7 @@ StructuredBuffer<uint>   cellStart        : register(t5);
 StructuredBuffer<uint>   cellEnd          : register(t6);
 
 StructuredBuffer<float> lambda            : register(t10); // read lambda
+StructuredBuffer<uint>  gPhase            : register(t14); // solid/liquid phase
 
 RWStructuredBuffer<float3> deltaP          : register(u11); // write deltaP
 
@@ -14,6 +15,9 @@ RWStructuredBuffer<float3> deltaP          : register(u11); // write deltaP
 static const float kTensile = 0.001f;   // 0.001 .. 0.01
 static const float nTensile = 4.0f;
 static const float deltaQ  = 0.2f;      // in units of h
+// Solid particles act as rigid walls — amplify their pressure contribution so
+// liquid cannot penetrate the frozen block.
+static const float solidPressureMultiplier = 15.0f;
 
 [numthreads(256,1,1)]
 void CSMain(uint gid : SV_DispatchThreadID)
@@ -70,7 +74,9 @@ void CSMain(uint gid : SV_DispatchThreadID)
             float W = cubic_kernel_height(rij);
             float scorr = -kTensile * pow(W / Wdq, nTensile);
 
-            dpi += (li + lj + scorr) * gradW;
+            // Solid neighbors produce amplified repulsion so liquid cannot penetrate the block
+            float pressureWeight = (gPhase[j] == 1u) ? solidPressureMultiplier : 1.0f;
+            dpi += pressureWeight * (li + lj + scorr) * gradW;
         }
     }
 

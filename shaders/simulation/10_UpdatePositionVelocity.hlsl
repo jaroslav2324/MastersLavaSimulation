@@ -22,6 +22,15 @@ void CSMain(uint gid : SV_DispatchThreadID)
     float3 x_old = positions[i];
     float3 x_new = predicted[i];
 
+    // Solid particles are static obstacles — keep position fixed, zero velocity
+    uint curPhase = phase[i];
+    if (curPhase == 1u)
+    {
+        velocities[i] = float3(0, 0, 0);
+        predicted[i]  = x_old;
+        return;
+    }
+
     // --- world bounds ---
     float3 worldMin = worldOrigin;
     float3 worldMax = worldOrigin + float3(gridResolution) * cellSize;
@@ -72,18 +81,6 @@ void CSMain(uint gid : SV_DispatchThreadID)
 
     // Optional damping
     v *= velocityDamping;
-
-    // TODO: use enum like constants for phase values
-    // Apply extra damping for solid (frozen) particles with a temperature-based smoothing
-    uint curPhase = phase[i];
-    if (curPhase == 1)
-    {
-        float Ti = temperatureIn[i];
-        float halfWidth = dampingTransitionWidth * 0.5;
-        float tCoef = saturate((Ti - (meltTemperature - halfWidth)) / dampingTransitionWidth);
-        float phaseMultiplier = lerp(solidVelocityDamping, 1.0f, tCoef);
-        v *= phaseMultiplier;
-    }
 
     velocities[i] = v;
     positions[i]  = x_new;

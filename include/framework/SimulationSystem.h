@@ -48,10 +48,13 @@ public:
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDenseRandomPositions(UINT numParticles, unsigned seed = 1337);
     static std::vector<DirectX::SimpleMath::Vector3> GenerateDamBreakPositions(UINT numParticles);
     static std::vector<DirectX::SimpleMath::Vector3> GenerateTwoSpheresPositions(UINT numParticles);
+    static std::vector<DirectX::SimpleMath::Vector3> GenerateFrozenBlockHotSpherePositions(UINT numParticles);
     // Generate temperatures for a set of positions according to scene rules
     static void GenerateTemperaturesForPositions(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
     static void GenerateDamBreakTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
     static void GenerateTwoSpheresTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
+    static void GenerateFrozenBlockHotSphereTemperatures(const std::vector<DirectX::SimpleMath::Vector3> &positions, std::vector<float> &outTemps);
+    static void GenerateFrozenBlockHotSpherePhases(const std::vector<float> &temps, std::vector<uint32_t> &outPhases);
 
 private:
     static void CreateSimulationRootSignature(ID3D12Device *device);
