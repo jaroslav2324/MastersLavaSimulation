@@ -14,6 +14,7 @@ struct GlobalConstants
 	Matrix view;
 	Matrix invView;
 	Matrix proj;
+	Vector3 globalLightDirection;  // world-space direction light travels, normalized
 	float nearPlane;
 	float farPlane;
 	float particleRadius;

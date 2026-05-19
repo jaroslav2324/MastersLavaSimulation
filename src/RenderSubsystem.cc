@@ -116,6 +116,10 @@ void RenderSubsystem::UpdateGlobalConstantBuffer()
 
     m_globalConstants.particleRadius = 0.8 * SimulationSystem::GetKernelRadius() / 2.0;
 
+    Vector3 lightDir{1.0f, -2.0f, 1.0f};
+    lightDir.Normalize();
+    m_globalConstants.globalLightDirection = lightDir;
+
     // Map and copy data
     UINT8 *pData;
     D3D12_RANGE readRange = {0, 0};

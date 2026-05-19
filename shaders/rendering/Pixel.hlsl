@@ -1,8 +1,23 @@
+cbuffer Globals : register(b0)
+{
+    float4x4 view;
+    float4x4 invView;
+    float4x4 proj;
+    float3 globalLightDirection;  // world-space direction light travels, normalized
+    float nearPlane;
+    float farPlane;
+    float particleRadius;
+    float _pad;
+};
+
 struct VSOut
 {
-    float4 posH : SV_Position;    
-    float2 uv   : TEXCOORD0;        
-    float  temp : TEXCOORD1;      
+    float4 posH      : SV_Position;
+    float2 uv        : TEXCOORD0;
+    float  temp      : TEXCOORD1;
+    float3 billRight : TEXCOORD2;
+    float3 billUp    : TEXCOORD3;
+    float3 billFwd   : TEXCOORD4;
 };
 
 static const uint LavaLUTSize = 8;
@@ -25,7 +40,6 @@ float3 TempToLavaColor(float temperatureK)
     float t = clamp(temperatureK, Tmin, Tmax);
     float u = (t - Tmin) / (Tmax - Tmin);
 
-    // Map to LUT space
     float fIndex = u * (LavaLUTSize - 1);
 
     uint index0 = (uint)floor(fIndex);
@@ -38,16 +52,19 @@ float3 TempToLavaColor(float temperatureK)
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    float r = length(i.uv);
-    clip(1.0 - r);
+    float r2 = dot(i.uv, i.uv);
+    clip(1.0 - r2);
 
-    float3 col = TempToLavaColor(i.temp);
+    // Sphere normal in world space: billboard axes are fixed to camera position,
+    // so this normal is independent of camera view direction.
+    float nz = sqrt(1.0 - r2);
+    float3 N = normalize(i.billRight * i.uv.x + i.billUp * i.uv.y + i.billFwd * nz);
 
-    // мягкое затухание по краю частицы
-    //float edge = smoothstep(1.0, 0.8, r);
+    float3 L      = -normalize(globalLightDirection);  // direction from surface toward light
+    float ndotl   = max(dot(N, L), 0.0);
+    float ambient = 0.15;
+    float lighting = ambient + (1.0 - ambient) * ndotl;
 
-    //return float4(col * edge, 1.0);
-
-
+    float3 col = TempToLavaColor(i.temp) * lighting;
     return float4(col, 1.0);
 }
