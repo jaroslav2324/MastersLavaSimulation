@@ -15,13 +15,14 @@
 
 ## Визуализация и производительность
 
-<img width="750" height="1100" alt="image" src="https://github.com/user-attachments/assets/096d3d23-ce79-48e9-8cd3-8d9aa29173c9" />
+<img width="944" height="1394" alt="image" src="https://github.com/user-attachments/assets/01f51a2a-2f4f-4779-95de-c28e7c472153" />
 
-Среднее время 10к шанов симуляции, 4096 ячеек пространства, сцена с шаром
-<img width="944" height="500" alt="image" src="https://github.com/user-attachments/assets/bebe95e2-626d-4554-be0f-e130142724cc" />
+Среднее время 10к шанов симуляции, ~4 тысячи ячеек пространства, сцена с шаром
+<img width="750" height="450" alt="image" src="https://github.com/user-attachments/assets/ea00765a-0d2b-4b3d-93ce-50bda48df136" />
 
-Среднее время 10к шанов симуляции, 16384 ячеек пространства, сцена с шаром
-<img width="2079" height="1274" alt="123123" src="https://github.com/user-attachments/assets/dba2523a-253a-469f-884d-eb40b809eb80" />
+Среднее время 10к шанов симуляции, ~16 тысяч ячеек пространства, сцена с шаром
+<img width="750" height="450" alt="image" src="https://github.com/user-attachments/assets/f41716c7-186c-489f-a223-f35a2c3721d9" />
 
-Среднее время 10к шанов симуляции, 4096 ячеек пространства, сцена dam break
-<img width="2079" height="1290" alt="321321" src="https://github.com/user-attachments/assets/d3700a12-427b-4683-a1e4-2672dd43d421" />
+Среднее время 10к шанов симуляции, ~64 тысячи ячеек пространства, сцена dam break
+<img width="750" height="450" alt="image" src="https://github.com/user-attachments/assets/2c24d876-237f-41ae-bf3c-1b245f247401" />
+
